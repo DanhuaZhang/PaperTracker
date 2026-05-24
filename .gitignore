@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Runtime state / output
+.seen_papers.json
+.summary_cache.json
+digests/*.md
+!digests/.gitkeep
+
+# Env / IDE
+.env
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code local settings
+.claude/settings.local.json
