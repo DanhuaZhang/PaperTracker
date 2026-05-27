@@ -15,18 +15,21 @@ log = logging.getLogger(__name__)
 
 _PROMPT_TEMPLATE = """\
 You are a research assistant for embodied-AI / XR / spatial-computing researchers.
-Summarize the following paper as 3–5 markdown bullets covering, in order:
+Summarize the following paper as markdown bullets covering, in order:
 1. Core objective / what it does
 2. Key technical contribution
 3. Main results, benchmarks, or datasets
-4. (Optional) Limitations noted by the authors
-5. (Optional) Relevance to embodied / XR / AR / VR research
+4. **Model & data:** Did the authors train a new model? If so, name its architecture/structure and the training dataset(s). Also state whether they introduce a new dataset or benchmark.
+5. **Open source:** Are the code and/or dataset publicly released? Include the repo/link if the abstract gives one.
+6. (Optional) Limitations noted by the authors
+7. (Optional) Relevance to embodied / XR / AR / VR research
 
 Rules:
 - Active voice; cite numbers and dataset names when the abstract provides them.
+- For items 4 and 5, if the abstract doesn't say, write "Not stated in the abstract" — do not guess.
 - Do not restate the paper title.
 - Do not speculate beyond the abstract.
-- Under 300 words total.
+- Under 350 words total.
 - Output the bullets only — no preamble, no closing remark.
 
 Title: {title}
