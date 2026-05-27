@@ -94,8 +94,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--select", action="store_true",
-        help="Interactively pick which matched papers to summarize (terminal "
-             "checkboxes), then summarize only those. Overrides --no-summarize.",
+        help="Interactively pick which matched papers to summarize via a browser "
+             "UI (numbered text prompt when headless), then summarize only those. "
+             "Overrides --no-summarize.",
     )
     p.add_argument(
         "-v", "--verbose", action="store_true",
