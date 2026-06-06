@@ -225,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     else:
         to_summarize = new_papers
+        for p in to_summarize:
+            p.setdefault("mode", "triage")
 
     if not to_summarize:
         content = digest_writer.render_empty_digest(today_str)
@@ -239,19 +241,20 @@ def main(argv: list[str] | None = None) -> int:
 
     pairs: list[tuple[dict, str]] = []
     for i, paper in enumerate(to_summarize, 1):
-        cached = None if args.refresh_summaries else summary_cache.lookup(cache, paper)
+        mode = paper.get("mode", "triage")
+        cached = None if args.refresh_summaries else summary_cache.lookup(cache, paper, mode)
         if cached is not None:
             cache_hits += 1
-            log.info("Cached [%d/%d] %s", i, len(to_summarize), paper["title"][:60])
+            log.info("Cached [%d/%d] (%s) %s", i, len(to_summarize), mode, paper["title"][:60])
             pairs.append((paper, cached))
             continue
 
-        log.info("Summarizing [%d/%d] %s", i, len(to_summarize), paper["title"][:60])
+        log.info("Summarizing [%d/%d] (%s) %s", i, len(to_summarize), mode, paper["title"][:60])
         try:
-            summary = summarizer.summarize_paper(paper, provider, model)
-            new_cache_entries[paper["canonical_id"]] = {
+            summary = summarizer.summarize_paper(paper, provider, model, mode)
+            new_cache_entries[summary_cache.cache_key(paper["canonical_id"], mode)] = {
                 "summary": summary, "model": model,
-                "provider": provider, "generated": today_str,
+                "provider": provider, "mode": mode, "generated": today_str,
             }
         except subprocess.CalledProcessError as e:
             reason = (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"

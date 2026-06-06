@@ -43,6 +43,29 @@ uv run papertracker -v                    # debug logging
 
 The digest lands in `digests/YYYY-MM-DD.md`. Already-summarized DOIs/arXiv IDs are remembered in `.seen_papers.json` so re-runs only summarize new papers.
 
+## Two summary modes (`--select`)
+
+With `--select`, the browser selector lets you choose a **mode per paper**:
+
+- **Triage** — the standard relevance bullets (objective, contribution, results, model & data, open source, future work). Use it to gauge how close a paper is to your own work.
+- **Deep (Obsidian)** — fills in *your* Obsidian paper-note template so you can drop it straight into your vault and complete the judgement sections (e.g. "My take") after reading.
+
+In the headless text fallback, append `d` to a number for deep mode (e.g. `1,3d` = paper 1 triage, paper 3 deep).
+
+Both modes read the **full PDF from your local Zotero library** when the paper is found there (matched by DOI, then title); otherwise they fall back to the abstract and the summary is tagged *"Abstract-based (no Zotero PDF found)."* So **file a paper in Zotero before summarizing** to get full-text output. Summaries are cached per `(paper, mode)` in `.summary_cache.json`.
+
+> Full-text PDF reading currently requires the **`claude`** provider (the CLI reads the PDF directly). With `codex`, deep mode degrades to abstract-based.
+
+### Configuration (env vars)
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `PAPERTRACKER_OBSIDIAN_TEMPLATE` | Path to your Obsidian paper-note template `.md`; injected into deep-mode prompts | built-in default template |
+| `PAPERTRACKER_ZOTERO_DIR` | Zotero data directory (contains `zotero.sqlite` + `storage/`) | `~/Zotero` |
+| `PAPERTRACKER_ZOTERO_LINKED_BASE` | Base dir for Zotero "Linked Attachment Base Directory" (ZotFile-style linked PDFs) | unset |
+
+The Zotero DB is opened **read-only** (copied to a temp file first), so PaperTracker never modifies your library.
+
 ## Default AI tool — precedence
 
 Pick **one** of these to set your default provider; CLI flag wins, then env var, then config file, then built-in default.

@@ -74,15 +74,22 @@ def select_papers(papers: list[dict]) -> list[dict]:
 # HTML (localhost server) path
 # --------------------------------------------------------------------------- #
 
-def _indices_from_form(form: dict[str, list[str]], n: int) -> list[int]:
-    """Map a parsed POST form to a sorted list of valid 0-based indices."""
+def _selections_from_form(form: dict[str, list[str]], n: int) -> list[tuple[int, str]]:
+    """Map a parsed POST form to a sorted list of (index, mode) pairs."""
     if "cancel" in form:
         return []
-    chosen = {
-        int(v) for v in form.get("sel", [])
-        if v.isdigit() and 0 <= int(v) < n
-    }
-    return sorted(chosen)
+    out: list[tuple[int, str]] = []
+    for v in form.get("sel", []):
+        if not v.isdigit():
+            continue
+        i = int(v)
+        if not (0 <= i < n):
+            continue
+        mode = (form.get(f"mode_{i}", ["triage"])[0]).strip().lower()
+        if mode not in ("triage", "deep"):
+            mode = "triage"
+        out.append((i, mode))
+    return sorted(out)
 
 
 def _make_server(ordered: list[dict], page: str):
@@ -92,7 +99,7 @@ def _make_server(ordered: list[dict], page: str):
     chosen index list.
     """
     n = len(ordered)
-    result: dict[str, list[int] | None] = {"selected": None}
+    result: dict[str, list[tuple[int, str]] | None] = {"selected": None}
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):  # silence per-request logging
@@ -116,7 +123,7 @@ def _make_server(ordered: list[dict], page: str):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", 0))
             form = parse_qs(self.rfile.read(length).decode("utf-8"))
-            result["selected"] = _indices_from_form(form, n)
+            result["selected"] = _selections_from_form(form, n)
             self._send(_done_html(len(result["selected"])))
 
     httpd = http.server.HTTPServer(("127.0.0.1", 0), Handler)
@@ -138,7 +145,12 @@ def _select_html(ordered: list[dict]) -> list[dict]:
         print("\n  Selection cancelled.")
     finally:
         httpd.server_close()
-    return [ordered[i] for i in (result["selected"] or [])]
+    out = []
+    for i, mode in (result["selected"] or []):
+        paper = dict(ordered[i])
+        paper["mode"] = mode
+        out.append(paper)
+    return out
 
 
 _CSS = """
@@ -164,6 +176,8 @@ main{max-width:900px;margin:0 auto;padding:18px 20px 60px;display:flex;flex-dire
 .card:hover{border-color:#8b949e}
 .card:has(input:checked){border-color:#2ea043;background:#0f2419}
 .card input{margin-top:3px;width:18px;height:18px;flex:none;cursor:pointer}
+.pick{display:flex;flex-direction:column;gap:6px;align-items:center;flex:none}
+.mode{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:5px;font:inherit;font-size:12px;padding:2px 4px;cursor:pointer}
 .body{flex:1;min-width:0}
 .title{font-size:16px;font-weight:600;line-height:1.35}
 .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#8b949e;font-size:13px;margin-top:5px}
@@ -204,7 +218,13 @@ def _card(i: int, paper: dict) -> str:
     abstract = html.escape((paper.get("abstract") or "").strip()) or "(no abstract)"
     return (
         f'<label class="card">'
+        f'<div class="pick">'
         f'<input type="checkbox" name="sel" value="{i}">'
+        f'<select name="mode_{i}" class="mode" onclick="event.stopPropagation()">'
+        f'<option value="triage">Triage</option>'
+        f'<option value="deep">Deep (Obsidian)</option>'
+        f'</select>'
+        f'</div>'
         f'<div class="body">'
         f'<div class="title">{title}</div>'
         f'<div class="meta">'
@@ -275,31 +295,42 @@ def _select_fallback(ordered: list[dict]) -> list[dict]:
             f"  {dim}{_meta(p)}{reset}"
         )
     try:
-        raw = input("Pick papers to summarize (e.g. 1,3 or 1-3, 'a'=all, enter=none): ")
+        raw = input("Pick papers (e.g. '1,3' triage, '2d' deep; 'a'=all triage, enter=none): ")
     except EOFError:
         raw = ""
-    return [ordered[i] for i in _parse_selection(raw, len(ordered))]
+    out = []
+    for i, mode in _parse_selection(raw, len(ordered)):
+        paper = dict(ordered[i])
+        paper["mode"] = mode
+        out.append(paper)
+    return out
 
 
-def _parse_selection(raw: str, n: int) -> list[int]:
-    """Parse '1,3', '1-3', 'a'/'all', '' into a sorted list of 0-based indices."""
+def _parse_selection(raw: str, n: int) -> list[tuple[int, str]]:
+    """Parse '1,3d', '1-3', 'a'/'all', '' into sorted (0-based index, mode) pairs.
+
+    A trailing 'd' on a token marks deep mode; otherwise triage. 'a'/'all' = all triage.
+    """
     raw = raw.strip().lower()
     if not raw:
         return []
     if raw in ("a", "all"):
-        return list(range(n))
-    chosen: set[int] = set()
+        return [(i, "triage") for i in range(n)]
+    chosen: dict[int, str] = {}
     for tok in raw.replace(" ", "").split(","):
         if not tok:
             continue
+        mode = "triage"
+        if tok.endswith("d"):
+            mode, tok = "deep", tok[:-1]
         if "-" in tok:
             lo, _, hi = tok.partition("-")
             if lo.isdigit() and hi.isdigit():
                 for v in range(int(lo), int(hi) + 1):
                     if 1 <= v <= n:
-                        chosen.add(v - 1)
+                        chosen[v - 1] = mode
         elif tok.isdigit():
             v = int(tok)
             if 1 <= v <= n:
-                chosen.add(v - 1)
-    return sorted(chosen)
+                chosen[v - 1] = mode
+    return sorted(chosen.items())

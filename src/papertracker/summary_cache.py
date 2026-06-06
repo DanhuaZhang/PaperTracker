@@ -29,11 +29,16 @@ def load(path: Path) -> dict[str, dict]:
         return {}
 
 
-def lookup(cache: dict[str, dict], paper: dict) -> str | None:
+def cache_key(canonical_id: str, mode: str) -> str:
+    return f"{canonical_id}::{mode}"
+
+
+def lookup(cache: dict[str, dict], paper: dict, mode: str) -> str | None:
     """Return a cached summary if this paper — under its canonical_id or any of its
-    cross-source merged_ids — has one. None means it must be (re)generated."""
+    cross-source merged_ids, for the given mode — has one. None means it must be
+    (re)generated."""
     for cid in paper.get("merged_ids", [paper["canonical_id"]]):
-        entry = cache.get(cid)
+        entry = cache.get(cache_key(cid, mode))
         if entry and entry.get("summary"):
             return entry["summary"]
     return None

@@ -1,11 +1,12 @@
 """Built-in defaults. Override via env vars, ~/.config/papertracker/config.toml, or CLI flags."""
 
 import os
+from pathlib import Path
 
 # Default AI provider (overridable via env var / TOML file / CLI flag)
 DEFAULT_PROVIDER = "claude"          # "claude" | "codex"
 CLAUDE_MODEL = "sonnet"              # CLI alias or full ID
-CODEX_MODEL = "gpt-5.3-codex"
+CODEX_MODEL = "gpt-5.4"
 
 # CrossRef / OpenAlex polite-pool identifier. Set PAPERTRACKER_EMAIL in your shell
 # (or leave unset for anonymous requests — works, but with lower rate-limit priority).
@@ -91,7 +92,7 @@ DEFAULT_DAYS = 2
 # Per-source upper cap. Each source paginates up to this many results. Embedding
 # is local and free, so generous is fine. Raise further if you regularly fetch
 # conference-deposit windows (CHI/SIGGRAPH can deposit 1000+ papers in one day).
-MAX_RESULTS_PER_QUERY = 500
+MAX_RESULTS_PER_QUERY = 1500
 DIGEST_DIR = "digests"
 SEEN_PAPERS_FILE = ".seen_papers.json"
 # Persistent cache of LLM summaries keyed by canonical_id; lets re-runs reuse summaries
@@ -99,3 +100,43 @@ SEEN_PAPERS_FILE = ".seen_papers.json"
 SUMMARY_CACHE_FILE = ".summary_cache.json"
 SUMMARY_TIMEOUT_SEC = 180
 ENABLED_SOURCES_DEFAULT = ["arxiv", "ieee", "acm", "journal_rss"]
+
+
+# --- Zotero integration -----------------------------------------------------
+# Default macOS/Linux data dir is ~/Zotero. Override with PAPERTRACKER_ZOTERO_DIR.
+def zotero_data_dir() -> Path:
+    env = os.environ.get("PAPERTRACKER_ZOTERO_DIR")
+    return Path(env).expanduser() if env else Path.home() / "Zotero"
+
+
+def zotero_linked_base_dir() -> Path | None:
+    """Base dir for Zotero 'Linked Attachment Base Directory' (ZotFile-style)."""
+    env = os.environ.get("PAPERTRACKER_ZOTERO_LINKED_BASE")
+    return Path(env).expanduser() if env else None
+
+
+# --- Obsidian deep-summary template ----------------------------------------
+DEFAULT_OBSIDIAN_TEMPLATE = """\
+---
+title:
+authors:
+year:
+venue:
+tags: [paper]
+---
+## TL;DR
+## Problem
+## Method
+## Results
+## My take / relevance to my work
+"""
+
+
+# Path to the user's Obsidian paper-note template. When unset, DEFAULT below is used.
+def obsidian_template() -> str:
+    env = os.environ.get("PAPERTRACKER_OBSIDIAN_TEMPLATE")
+    if env:
+        p = Path(env).expanduser()
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+    return DEFAULT_OBSIDIAN_TEMPLATE
