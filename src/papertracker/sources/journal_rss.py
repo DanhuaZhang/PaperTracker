@@ -21,12 +21,17 @@ log = logging.getLogger(__name__)
 _DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"'<>]+", re.I)
 
 
-def fetch(start_date: dt.date, end_date: dt.date) -> list[dict]:
+def fetch(
+    start_date: dt.date,
+    end_date: dt.date,
+    profile: config.ProjectProfile | None = None,
+) -> list[dict]:
     lo, hi = start_date.isoformat(), end_date.isoformat()
     out: list[dict] = []
     total_dropped_no_abstract = 0
     total_dropped_out_of_window = 0
-    for venue in config.PRIORITY_VENUES:
+    priority_venues = profile.priority_venues if profile else config.PRIORITY_VENUES
+    for venue in priority_venues:
         rss_url = venue.get("rss")
         if not rss_url:
             continue
@@ -48,7 +53,7 @@ def fetch(start_date: dt.date, end_date: dt.date) -> list[dict]:
             if not paper["abstract"]:
                 total_dropped_no_abstract += 1
                 continue
-            paper["venue"] = tag_venue(paper["container_title"]) or venue["name"]
+            paper["venue"] = tag_venue(paper["container_title"], priority_venues) or venue["name"]
             out.append(paper)
     log.info(
         "journal_rss: kept %d (dropped %d no-abstract, %d out of window) — pre-relevance",

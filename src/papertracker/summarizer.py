@@ -60,6 +60,15 @@ _PDF_INSTRUCTION = (
 _ABSTRACT_INSTRUCTION = "Base your answer on this title and abstract only.\n\n"
 
 
+def _project_context(profile: config.ProjectProfile | None) -> str:
+    if profile is None:
+        return ""
+    return (
+        f"Project: {profile.name}\n"
+        f"Project topic focus: {profile.topic_statement.strip()}\n\n"
+    )
+
+
 def binary_for(provider: str) -> str:
     if provider == "claude":
         return "claude"
@@ -79,33 +88,54 @@ def preflight(provider: str) -> None:
         raise SystemExit(f"{binary!r} not found on PATH — {hint}")
 
 
-def build_prompt(paper: dict, mode: str, pdf_path) -> tuple[str, bool]:
+def build_prompt(
+    paper: dict,
+    mode: str,
+    pdf_path,
+    profile: config.ProjectProfile | None = None,
+) -> tuple[str, bool]:
     """Return (prompt, uses_pdf). uses_pdf drives whether the Read tool is enabled."""
     uses_pdf = pdf_path is not None
     source = (
         _PDF_INSTRUCTION.format(pdf_path=pdf_path) if uses_pdf else _ABSTRACT_INSTRUCTION
     )
+    context = _project_context(profile)
     if mode == "deep":
         body = _DEEP_HEADER.format(template=config.obsidian_template())
         meta = f"Title: {paper['title']}\n\nAbstract: {paper.get('abstract', '')}\n"
-        return source + body + "\n" + meta, uses_pdf
+        return source + context + body + "\n" + meta, uses_pdf
     # triage template already embeds title/abstract; only prepend the source note
     body = _TRIAGE_TEMPLATE.format(title=paper["title"], abstract=paper.get("abstract", ""))
-    return source + body, uses_pdf
+    return source + context + body, uses_pdf
 
 
-def summarize_paper(paper: dict, provider: str, model: str, mode: str = "triage") -> str:
+def summarize_paper(
+    paper: dict,
+    provider: str,
+    model: str,
+    mode: str = "triage",
+    profile: config.ProjectProfile | None = None,
+) -> str:
     pdf_path = None
     if provider == "claude":  # full-text-via-Read implemented for claude only
         pdf_path = zotero.find_pdf(paper)
         if pdf_path is None:
             log.info("No Zotero PDF for %s — summarizing from abstract", paper.get("canonical_id"))
-    prompt, uses_pdf = build_prompt(paper, mode, pdf_path)
+    prompt, uses_pdf = build_prompt(paper, mode, pdf_path, profile)
     if provider == "claude":
         out = _summarize_claude(prompt, model, pdf_path if uses_pdf else None)
         if pdf_path is None:
             return "> _Abstract-based (no Zotero PDF found)._\n\n" + out
         return out
+    if provider == "codex":
+        return _summarize_codex(prompt, model)
+    raise ValueError(f"Unknown provider: {provider}")
+
+
+def run_json_prompt(provider: str, model: str, prompt: str) -> str:
+    """Run a no-tools prompt expected to return strict JSON."""
+    if provider == "claude":
+        return _summarize_claude(prompt, model)
     if provider == "codex":
         return _summarize_codex(prompt, model)
     raise ValueError(f"Unknown provider: {provider}")

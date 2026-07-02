@@ -38,6 +38,7 @@ def search(
     source_label: str,
     start_date: dt.date,
     end_date: dt.date,
+    profile: config.ProjectProfile | None = None,
 ) -> list[dict]:
     """Query CrossRef for papers from one publisher (by member ID) in [start_date, end_date].
 
@@ -51,7 +52,7 @@ def search(
         f"until-pub-date:{end_date.isoformat()}"
     )
 
-    items = _fetch_all_items(filter_str, cap, source_label)
+    items = _fetch_all_items(filter_str, cap, source_label, profile)
     if items is None:
         return []
 
@@ -70,8 +71,12 @@ def search(
         if not paper["abstract"]:
             dropped_no_abstract += 1
             continue
-        paper["venue"] = tag_venue(paper["container_title"])
-        if config.PRIORITY_VENUE_ONLY and paper["venue"] is None:
+        paper["venue"] = tag_venue(
+            paper["container_title"],
+            profile.priority_venues if profile else None,
+        )
+        priority_venue_only = profile.priority_venue_only if profile else config.PRIORITY_VENUE_ONLY
+        if priority_venue_only and paper["venue"] is None:
             dropped_not_priority_venue += 1
             continue
         out.append(paper)
@@ -108,7 +113,12 @@ def _get_with_retry(params: dict, headers: dict, source_label: str, offset: int)
     raise requests.HTTPError(f"CrossRef[{source_label}] gave up after {_MAX_RETRIES} retries")
 
 
-def _fetch_all_items(filter_str: str, cap: int, source_label: str) -> list[dict] | None:
+def _fetch_all_items(
+    filter_str: str,
+    cap: int,
+    source_label: str,
+    profile: config.ProjectProfile | None = None,
+) -> list[dict] | None:
     """Paginate CrossRef up to `cap` results. Returns None on hard error."""
     headers = {"User-Agent": config.USER_AGENT}
     items: list[dict] = []
@@ -118,7 +128,7 @@ def _fetch_all_items(filter_str: str, cap: int, source_label: str) -> list[dict]
         page = min(_PAGE_SIZE, cap - offset)
         params = {
             "filter": filter_str,
-            "query": config.CROSSREF_QUERY_HINT,
+            "query": profile.crossref_query_hint if profile else config.CROSSREF_QUERY_HINT,
             "rows": str(page),
             "offset": str(offset),
             "select": "DOI,title,abstract,author,published,issued,container-title,publisher,URL",

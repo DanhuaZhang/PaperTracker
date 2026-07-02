@@ -70,6 +70,20 @@ def select_papers(papers: list[dict]) -> list[dict]:
     return _select_fallback(ordered)
 
 
+def select_related_work_candidates(papers: list[dict], facets: list) -> list[dict]:
+    """Return approved related-work candidates with facet/role edits."""
+    if not papers:
+        return []
+    ordered = sorted(papers, key=lambda x: -(x.get("related_work_score") or 0))
+    if sys.stdin.isatty():
+        try:
+            return _select_related_html(ordered, facets)
+        except Exception as e:  # noqa: BLE001 — any UI failure degrades to text
+            print(f"  (browser selector unavailable: {e}; falling back to text)")
+            return _select_related_fallback(ordered)
+    return _select_related_fallback(ordered)
+
+
 # --------------------------------------------------------------------------- #
 # HTML (localhost server) path
 # --------------------------------------------------------------------------- #
@@ -130,6 +144,73 @@ def _make_server(ordered: list[dict], page: str):
     return httpd, result
 
 
+def _make_related_server(ordered: list[dict], facets: list, page: str):
+    n = len(ordered)
+    facet_ids = {facet.id for facet in facets}
+    roles = {
+        "foundational",
+        "method",
+        "benchmark",
+        "system",
+        "application",
+        "contrast",
+        "recent",
+        "background",
+    }
+    result: dict[str, list[dict] | None] = {"selected": None}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _send(self, body: str):
+            data = body.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if self.path in ("/", "/index.html"):
+                self._send(page)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            form = parse_qs(self.rfile.read(length).decode("utf-8"))
+            if "cancel" in form:
+                result["selected"] = []
+            else:
+                selected = []
+                for value in form.get("sel", []):
+                    if not value.isdigit():
+                        continue
+                    i = int(value)
+                    if not (0 <= i < n):
+                        continue
+                    facet_id = form.get(f"facet_{i}", [ordered[i].get("primary_facet") or ""])[0]
+                    role = form.get(f"role_{i}", [ordered[i].get("role") or "background"])[0]
+                    if facet_id not in facet_ids:
+                        facet_id = ordered[i].get("primary_facet") or next(iter(facet_ids), "")
+                    if role not in roles:
+                        role = "background"
+                    selected.append(
+                        {
+                            "canonical_id": ordered[i].get("canonical_id"),
+                            "primary_facet": facet_id,
+                            "role": role,
+                        }
+                    )
+                result["selected"] = selected
+            self._send(_done_html(len(result["selected"])))
+
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    return httpd, result
+
+
 def _select_html(ordered: list[dict]) -> list[dict]:
     page = _render_html(ordered)
     httpd, result = _make_server(ordered, page)
@@ -151,6 +232,24 @@ def _select_html(ordered: list[dict]) -> list[dict]:
         paper["mode"] = mode
         out.append(paper)
     return out
+
+
+def _select_related_html(ordered: list[dict], facets: list) -> list[dict]:
+    page = _render_related_html(ordered, facets)
+    httpd, result = _make_related_server(ordered, facets, page)
+    url = f"http://127.0.0.1:{httpd.server_address[1]}/"
+    print(f"  Opening related-work selector in your browser: {url}")
+    print("  Approve final inclusions there and click “Save selection” (or Ctrl-C to cancel).")
+    webbrowser.open(url)
+    try:
+        while result["selected"] is None:
+            httpd.handle_request()
+    except KeyboardInterrupt:
+        result["selected"] = []
+        print("\n  Selection cancelled.")
+    finally:
+        httpd.server_close()
+    return result["selected"] or []
 
 
 _CSS = """
@@ -241,6 +340,58 @@ def _card(i: int, paper: dict) -> str:
     )
 
 
+def _related_card(i: int, paper: dict, facets: list) -> str:
+    score = paper.get("related_work_score") or 0.0
+    title = html.escape(paper.get("title") or "(untitled)")
+    authors = paper.get("authors") or []
+    author_str = ", ".join(authors[:4]) + (f" +{len(authors) - 4} more" if len(authors) > 4 else "")
+    meta = html.escape(f"{author_str or '(authors unknown)'} · {_meta(paper)}")
+    url = html.escape(paper.get("url") or "#", quote=True)
+    why = html.escape(paper.get("why_cite") or "")
+    diff = html.escape(paper.get("difference_from_contribution") or "")
+    evidence = html.escape(paper.get("evidence_basis") or "metadata-only")
+    facet_options = "".join(
+        f'<option value="{html.escape(facet.id, quote=True)}"'
+        f'{" selected" if facet.id == paper.get("primary_facet") else ""}>'
+        f'{html.escape(facet.name)}</option>'
+        for facet in facets
+    )
+    role_options = "".join(
+        f'<option value="{role}"{" selected" if role == (paper.get("role") or "background") else ""}>'
+        f'{role.title()}</option>'
+        for role in (
+            "foundational",
+            "method",
+            "benchmark",
+            "system",
+            "application",
+            "contrast",
+            "recent",
+            "background",
+        )
+    )
+    return (
+        f'<label class="card">'
+        f'<div class="pick">'
+        f'<input type="checkbox" name="sel" value="{i}" checked>'
+        f'</div>'
+        f'<div class="body">'
+        f'<div class="title">{title}</div>'
+        f'<div class="meta">'
+        f'<span class="score" style="background:{_score_hex(score)}">{score:.3f}</span>'
+        f'<span>{meta}</span><span>Basis: {evidence}</span>'
+        f'</div>'
+        f'<div class="controls">'
+        f'<select name="facet_{i}" class="mode" onclick="event.stopPropagation()">{facet_options}</select>'
+        f'<select name="role_{i}" class="mode" onclick="event.stopPropagation()">{role_options}</select>'
+        f'</div>'
+        f'<p class="annotation"><b>Why cite:</b> {why}</p>'
+        f'<p class="annotation"><b>Differs:</b> {diff}</p>'
+        f'<a class="link" href="{url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open paper ↗</a>'
+        f'</div></label>'
+    )
+
+
 def _render_html(ordered: list[dict]) -> str:
     cards = "\n".join(_card(i, p) for i, p in enumerate(ordered))
     header = (
@@ -260,6 +411,36 @@ def _render_html(ordered: list[dict]) -> str:
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         f"<title>PaperTracker — {len(ordered)} papers</title>"
         f"<style>{_CSS}</style></head><body>"
+        "<form method=\"post\" action=\"/\">"
+        f"{header}<main>{cards}</main></form>"
+        f"<script>{_SCRIPT}</script>"
+        "</body></html>"
+    )
+
+
+def _render_related_html(ordered: list[dict], facets: list) -> str:
+    cards = "\n".join(_related_card(i, p, facets) for i, p in enumerate(ordered))
+    header = (
+        '<header>'
+        '<h1>PaperTracker — approve related-work bibliography</h1>'
+        '<div class="toolbar">'
+        '<button type="button" id="all">Select all</button>'
+        '<button type="button" id="none">Select none</button>'
+        '<span id="count" class="count">0 selected</span>'
+        '<span class="spacer"></span>'
+        '<button type="submit" name="cancel" value="1" class="cancel">Cancel</button>'
+        '<button type="submit" class="go">Save selection →</button>'
+        '</div></header>'
+    )
+    css = _CSS + """
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.annotation{margin:8px 0 0;color:#c9d1d9;font-size:13.5px}
+"""
+    return (
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        f"<title>PaperTracker — {len(ordered)} candidates</title>"
+        f"<style>{css}</style></head><body>"
         "<form method=\"post\" action=\"/\">"
         f"{header}<main>{cards}</main></form>"
         f"<script>{_SCRIPT}</script>"
@@ -304,6 +485,33 @@ def _select_fallback(ordered: list[dict]) -> list[dict]:
         paper["mode"] = mode
         out.append(paper)
     return out
+
+
+def _select_related_fallback(ordered: list[dict]) -> list[dict]:
+    use_color = sys.stdout.isatty()
+    bold = BOLD if use_color else ""
+    reset = RESET if use_color else ""
+
+    for i, p in enumerate(ordered, 1):
+        score = p.get("related_work_score") or 0.0
+        sc = _score_color(score) if use_color else ""
+        print(
+            f"  [{i:>2}] {sc}{score:.3f}{reset}  {bold}{p.get('title') or '(untitled)'}{reset}"
+            f"  {p.get('primary_facet') or '?'} · {p.get('role') or 'background'}"
+        )
+    try:
+        raw = input("Pick final bibliography papers (e.g. '1,3', 'a'=all, enter=none): ")
+    except EOFError:
+        raw = ""
+    picks = _parse_selection(raw, len(ordered))
+    return [
+        {
+            "canonical_id": ordered[i].get("canonical_id"),
+            "primary_facet": ordered[i].get("primary_facet"),
+            "role": ordered[i].get("role") or "background",
+        }
+        for i, _mode in picks
+    ]
 
 
 def _parse_selection(raw: str, n: int) -> list[tuple[int, str]]:

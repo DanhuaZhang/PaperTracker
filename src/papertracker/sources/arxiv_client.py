@@ -23,8 +23,8 @@ _NS = {
 _ENDPOINT = "https://export.arxiv.org/api/query"
 
 
-def _build_query(start: dt.date, end: dt.date) -> str:
-    cat_query = "+OR+".join(f"cat:{c}" for c in config.ARXIV_CATEGORIES)
+def _build_query(start: dt.date, end: dt.date, categories: list[str] | None = None) -> str:
+    cat_query = "+OR+".join(f"cat:{c}" for c in (categories or config.ARXIV_CATEGORIES))
     date_range = (
         f"submittedDate:[{start.strftime('%Y%m%d')}000000"
         f"+TO+{end.strftime('%Y%m%d')}235959]"
@@ -32,9 +32,13 @@ def _build_query(start: dt.date, end: dt.date) -> str:
     return f"({cat_query})+AND+{date_range}"
 
 
-def fetch(start_date: dt.date, end_date: dt.date) -> list[dict]:
+def fetch(
+    start_date: dt.date,
+    end_date: dt.date,
+    profile: config.ProjectProfile | None = None,
+) -> list[dict]:
     """Fetch arXiv entries submitted in [start_date, end_date]; relevance filtering happens in cli.py."""
-    q = _build_query(start_date, end_date)
+    q = _build_query(start_date, end_date, profile.arxiv_categories if profile else None)
     cap = config.MAX_RESULTS_PER_QUERY
     headers = {"User-Agent": config.USER_AGENT}
 

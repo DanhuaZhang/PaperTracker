@@ -9,7 +9,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-_SOURCE_RANK = {"acm": 3, "ieee": 3, "journal_rss": 2, "arxiv": 1}
+_SOURCE_RANK = {"acm": 3, "ieee": 3, "journal_rss": 2, "openalex": 2, "arxiv": 1}
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 # Title-only matching is risky for very short/generic titles, so require this many
@@ -30,6 +30,7 @@ def load_seen(path: Path) -> set[str]:
 
 
 def save_seen(path: Path, new_ids: set[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, str] = {}
     if path.exists():
         try:

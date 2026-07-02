@@ -4,7 +4,7 @@ Order (first non-empty wins):
   1. CLI flag
   2. PAPERTRACKER_* env var
   3. ~/.config/papertracker/config.toml
-  4. Built-in default from config.py
+  4. ./papertracker.toml project default
 """
 from __future__ import annotations
 
@@ -15,15 +15,16 @@ from pathlib import Path
 from . import config
 
 CONFIG_PATH = Path.home() / ".config" / "papertracker" / "config.toml"
+PROJECT_CONFIG_PATH = config.PROJECT_CONFIG_PATH
 
 _VALID_PROVIDERS = ("claude", "codex")
 
 
-def _load_toml_config() -> dict:
-    if not CONFIG_PATH.is_file():
+def _load_toml_config(path: Path) -> dict:
+    if not path.is_file():
         return {}
     try:
-        with CONFIG_PATH.open("rb") as f:
+        with path.open("rb") as f:
             return tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError):
         return {}
@@ -47,7 +48,7 @@ def resolve_provider(cli_arg: str | None) -> tuple[str, str]:
             )
         return env, "env var PAPERTRACKER_PROVIDER"
 
-    toml_cfg = _load_toml_config()
+    toml_cfg = _load_toml_config(CONFIG_PATH)
     if "provider" in toml_cfg:
         prov = toml_cfg["provider"]
         if prov not in _VALID_PROVIDERS:
@@ -57,7 +58,17 @@ def resolve_provider(cli_arg: str | None) -> tuple[str, str]:
             )
         return prov, f"config file {CONFIG_PATH}"
 
-    return config.DEFAULT_PROVIDER, "built-in default"
+    project_cfg = _load_toml_config(PROJECT_CONFIG_PATH)
+    if "provider" in project_cfg:
+        prov = project_cfg["provider"]
+        if prov not in _VALID_PROVIDERS:
+            raise ValueError(
+                f"Invalid provider in {PROJECT_CONFIG_PATH}: {prov!r}. "
+                f"Choose one of: {', '.join(_VALID_PROVIDERS)}"
+            )
+        return prov, f"project config file {PROJECT_CONFIG_PATH}"
+
+    return config.DEFAULT_PROVIDER, f"project config file {PROJECT_CONFIG_PATH}"
 
 
 def resolve_model(cli_arg: str | None, provider: str) -> tuple[str, str]:
@@ -69,9 +80,13 @@ def resolve_model(cli_arg: str | None, provider: str) -> tuple[str, str]:
     if env:
         return env, "env var PAPERTRACKER_MODEL"
 
-    toml_cfg = _load_toml_config()
+    toml_cfg = _load_toml_config(CONFIG_PATH)
     if "model" in toml_cfg:
         return toml_cfg["model"], f"config file {CONFIG_PATH}"
 
+    project_cfg = _load_toml_config(PROJECT_CONFIG_PATH)
+    if "model" in project_cfg:
+        return project_cfg["model"], f"project config file {PROJECT_CONFIG_PATH}"
+
     default = config.CLAUDE_MODEL if provider == "claude" else config.CODEX_MODEL
-    return default, "built-in default"
+    return default, f"provider fallback in {PROJECT_CONFIG_PATH}"

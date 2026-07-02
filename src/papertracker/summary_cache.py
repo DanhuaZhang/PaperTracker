@@ -46,6 +46,7 @@ def lookup(cache: dict[str, dict], paper: dict, mode: str) -> str | None:
 
 def save(path: Path, new_entries: dict[str, dict]) -> None:
     """Merge ``new_entries`` into the on-disk cache and write it back."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     existing = load(path)
     existing.update(new_entries)
     with path.open("w") as f:

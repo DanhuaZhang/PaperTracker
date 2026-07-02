@@ -12,7 +12,9 @@ wheels/
 # Runtime state / output
 .seen_papers.json
 .summary_cache.json
+.papertracker/
 digests/*.md
+digests/**/*.md
 !digests/.gitkeep
 
 # Env / IDE

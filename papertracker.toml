@@ -1,0 +1,114 @@
+# PaperTracker project defaults.
+# CLI flags and PAPERTRACKER_* environment variables can still override these at runtime.
+
+# Active summarization defaults.
+provider = "codex"          # "claude" or "codex"
+model = "gpt-5.5"             # CLI alias or full model ID for the selected provider
+
+# Provider-specific fallback model names.
+claude_model = "sonnet"
+codex_model = "gpt-5.5"
+
+# CrossRef / OpenAlex polite-pool identifier.
+# Leave user_email empty for anonymous requests.
+user_email = ""
+user_agent_name = "papertracker/0.1"
+
+# Embedding-based relevance filter.
+embedding_model = "BAAI/bge-small-en-v1.5"
+relevance_threshold = 0.65
+topic_statement = """
+Multi-modal embodied agents perceiving, reasoning about, and acting within 3D environments - including extended reality (XR), augmented reality (AR), and virtual reality (VR). Relevant topics include: vision-language models for embodied AI, 3D scene understanding, spatial reasoning over rooms and scenes, immersive interaction and mixed-reality interfaces, simulated agents in virtual worlds, embodied question answering, robot learning with multi-modal sensors, scene graphs and neural rendering for embodied perception, world models for navigation and manipulation, spatial interaction and spatial awareness in immersive environments, 3D avatars, and gaze/gesture interaction in XR.
+"""
+crossref_query_hint = "embodied agent multimodal 3D XR VR AR spatial scene understanding interaction awareness avatar"
+
+# Paper sources.
+arxiv_categories = ["cs.CV", "cs.RO", "cs.AI", "cs.HC", "cs.GR"]
+enabled_sources_default = ["arxiv", "ieee", "acm", "journal_rss"]
+priority_venue_only = false
+
+# Run and output defaults.
+default_days = 2
+max_results_per_query = 1500
+digest_dir = "digests"
+seen_papers_file = ".seen_papers.json"
+summary_cache_file = ".summary_cache.json"
+summary_timeout_sec = 180
+
+# Zotero integration.
+zotero_data_dir = "~/Zotero"
+zotero_linked_base = ""
+
+# Obsidian deep-summary template.
+obsidian_template = """
+---
+title:
+authors:
+year:
+venue:
+tags: [paper]
+---
+## TL;DR
+## Problem
+## Method
+## Results
+## My take / relevance to my work
+"""
+
+[[priority_venues]]
+name = "IEEE VR"
+publisher = "ieee"
+patterns = ["IEEE Conference on Virtual Reality", "IEEE VR "]
+
+[[priority_venues]]
+name = "ISMAR"
+publisher = "ieee"
+patterns = ["ISMAR", "Mixed and Augmented Reality"]
+
+[[priority_venues]]
+name = "IEEE TVCG"
+publisher = "ieee"
+patterns = ["Transactions on Visualization and Computer Graphics"]
+rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"
+
+[[priority_venues]]
+name = "ACM CHI"
+publisher = "acm"
+patterns = ["CHI Conference on Human Factors", "CHI '"]
+
+[[priority_venues]]
+name = "ACM UIST"
+publisher = "acm"
+patterns = ["User Interface Software and Technology", "UIST '"]
+
+[[priority_venues]]
+name = "ACM VRST"
+publisher = "acm"
+patterns = ["Virtual Reality Software and Technology", "VRST '"]
+
+[[priority_venues]]
+name = "ACM SUI"
+publisher = "acm"
+patterns = ["Spatial User Interaction", "SUI '"]
+
+[[priority_venues]]
+name = "SIGGRAPH"
+publisher = "acm"
+patterns = ["SIGGRAPH ", "SIGGRAPH '"]
+
+[[priority_venues]]
+name = "SIGGRAPH Asia"
+publisher = "acm"
+patterns = ["SIGGRAPH Asia"]
+
+[[priority_venues]]
+name = "ACM TOG"
+publisher = "acm"
+patterns = ["Transactions on Graphics"]
+rss = "https://dl.acm.org/action/showFeed?type=etoc&feed=rss&jc=tog"
+
+[[priority_venues]]
+name = "ACM TOCHI"
+publisher = "acm"
+patterns = ["Transactions on Computer-Human Interaction"]
+rss = "https://dl.acm.org/action/showFeed?type=etoc&feed=rss&jc=tochi"

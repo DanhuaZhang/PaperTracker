@@ -5,7 +5,7 @@ Daily markdown digest of the latest **multi-modal embodied-agent papers in 3D / 
 - **Sources**: arXiv (preprints), CrossRef (ACM + IEEE published papers), and journal RSS (TVCG, TOG, TOCHI).
 - **No paper-source API keys** — relies on free, no-auth public APIs. Your university VPN is only needed when you *click* the DOI link in the digest to read the full paper.
 - **No paid AI API key** — summarization shells out to your locally-installed `claude` (default) or `codex` CLI, consuming your Claude Pro/Max or ChatGPT Plus/Pro subscription quota.
-- Output: one `digests/YYYY-MM-DD.md` file per run, grouped by priority venue.
+- Output: one digest per project run, grouped by priority venue.
 
 ---
 
@@ -33,15 +33,24 @@ export PAPERTRACKER_EMAIL=your.email@example.com   # leave unset = anonymous
 
 ```bash
 uv run papertracker                       # last 2 days, all sources, default provider
+uv run papertracker --list-projects       # list configured topic/project profiles
+uv run papertracker --project xr-agents   # run one project profile
+uv run papertracker --all-projects        # run every project profile
 uv run papertracker --days 7              # wider window
 uv run papertracker --sources arxiv       # one source at a time
 uv run papertracker --no-summarize        # just list matches, no LLM calls
-uv run papertracker --priority-venues-only # drop papers not in PRIORITY_VENUES
+uv run papertracker --priority-venues-only # drop papers not in configured priority venues
 uv run papertracker --ignore-seen --days 14   # re-summarize already-seen papers
+uv run papertracker --related-work         # all-time important related work for the topic
+uv run papertracker --related-work --facets # grouped related-work candidate matrix
 uv run papertracker -v                    # debug logging
 ```
 
-The digest lands in `digests/YYYY-MM-DD.md`. Already-summarized DOIs/arXiv IDs are remembered in `.seen_papers.json` so re-runs only summarize new papers.
+With `projects.toml`, digests land in `digests/<project-id>/YYYY-MM-DD.md`.
+Already-summarized DOIs/arXiv IDs are remembered per project in
+`.papertracker/<project-id>/seen.json`, so one project does not hide papers from
+another. Without `projects.toml`, PaperTracker falls back to the legacy
+`digests/YYYY-MM-DD.md` and `.seen_papers.json` paths.
 
 ## Two summary modes (`--select`)
 
@@ -52,9 +61,41 @@ With `--select`, the browser selector lets you choose a **mode per paper**:
 
 In the headless text fallback, append `d` to a number for deep mode (e.g. `1,3d` = paper 1 triage, paper 3 deep).
 
-Both modes read the **full PDF from your local Zotero library** when the paper is found there (matched by DOI, then title); otherwise they fall back to the abstract and the summary is tagged *"Abstract-based (no Zotero PDF found)."* So **file a paper in Zotero before summarizing** to get full-text output. Summaries are cached per `(paper, mode)` in `.summary_cache.json`.
+Both modes read the **full PDF from your local Zotero library** when the paper is found there (matched by DOI, then title); otherwise they fall back to the abstract and the summary is tagged *"Abstract-based (no Zotero PDF found)."* So **file a paper in Zotero before summarizing** to get full-text output. Summaries are cached per `(paper, mode)` in the active project's summary cache.
 
 > Full-text PDF reading currently requires the **`claude`** provider (the CLI reads the PDF directly). With `codex`, deep mode degrades to abstract-based.
+
+## Related-work mode
+
+Use `--related-work` when you want a starter bibliography of important papers for
+the active project's `topic_statement`, including older highly cited papers:
+
+```bash
+uv run papertracker --project xr-agents --related-work
+uv run papertracker --project xr-agents --related-work --limit 50
+uv run papertracker --project xr-agents --related-work --select  # summarize selected papers
+uv run papertracker --project xr-agents --related-work --facets
+uv run papertracker --project xr-agents --related-work --facets --select
+```
+
+Related-work mode uses OpenAlex semantic search plus citation-count sorted search
+across all years, then reranks results with the local embedding relevance score.
+It does **not** use `--days`, does **not** update the project's `seen.json`, and
+writes to `digests/<project-id>/related-work/YYYY-MM-DD.md`.
+
+Faceted related-work mode groups candidates by generated or configured facets,
+annotates citation role/rationale from abstracts and metadata, and writes both
+`digests/<project-id>/related-work/YYYY-MM-DD.facets.md` and
+`digests/<project-id>/related-work/YYYY-MM-DD.facets.json`. Use `--facet-count`
+to control generated facets and `--facet-candidates` to control OpenAlex fetch
+depth per facet.
+
+OpenAlex works anonymously, but a free API key gives higher daily limits. Get one
+from <https://openalex.org/settings/api> and export it before running:
+
+```bash
+export PAPERTRACKER_OPENALEX_API_KEY="your_key_here"
+```
 
 ### Configuration (env vars)
 
@@ -63,19 +104,50 @@ Both modes read the **full PDF from your local Zotero library** when the paper i
 | `PAPERTRACKER_OBSIDIAN_TEMPLATE` | Path to your Obsidian paper-note template `.md`; injected into deep-mode prompts | built-in default template |
 | `PAPERTRACKER_ZOTERO_DIR` | Zotero data directory (contains `zotero.sqlite` + `storage/`) | `~/Zotero` |
 | `PAPERTRACKER_ZOTERO_LINKED_BASE` | Base dir for Zotero "Linked Attachment Base Directory" (ZotFile-style linked PDFs) | unset |
+| `PAPERTRACKER_OPENALEX_API_KEY` | Optional free OpenAlex key for higher related-work / abstract-lookup limits | unset |
 
 The Zotero DB is opened **read-only** (copied to a temp file first), so PaperTracker never modifies your library.
 
-## Default AI tool — precedence
+## Configuration
 
-Pick **one** of these to set your default provider; CLI flag wins, then env var, then config file, then built-in default.
+Runtime defaults live in `papertracker.toml` in this repo. That file contains
+the default provider/model plus source defaults, output base paths, Zotero, and
+Obsidian template settings.
+
+For example, to switch the default summarizer to Codex, edit:
+
+```toml
+provider = "codex"
+model = "gpt-5.4"
+```
+
+Project/topic profiles live in `projects.toml`. Each profile has its own topic
+statement and CrossRef keyword hint:
+
+```toml
+default_project = "xr-agents"
+
+[[projects]]
+id = "xr-agents"
+name = "XR embodied agents"
+topic_statement = """
+Embodied agents, XR, AR/VR, spatial reasoning, and 3D scene understanding.
+"""
+crossref_query_hint = "embodied agent XR AR VR spatial reasoning 3D scene"
+arxiv_categories = ["cs.CV", "cs.RO", "cs.HC"]
+relevance_threshold = 0.65
+```
+
+### Default AI tool — precedence
+
+Pick **one** of these to set your default provider; CLI flag wins, then env var, then personal config file, then repo config.
 
 | Method | How | Persistence |
 |---|---|---|
 | CLI flag | `papertracker --provider codex` | one run |
 | Env var | `export PAPERTRACKER_PROVIDER=codex` in `~/.zshrc` | per shell |
-| Config file | `~/.config/papertracker/config.toml` → `provider = "codex"` | global |
-| Built-in default | `src/papertracker/config.py` → `DEFAULT_PROVIDER = "claude"` | fallback |
+| Personal config file | `~/.config/papertracker/config.toml` → `provider = "codex"` | global user override |
+| Repo config file | `papertracker.toml` → `provider = "codex"` | project default |
 
 Same chain applies to `--model` / `PAPERTRACKER_MODEL` / `model = "..."`.
 
@@ -103,13 +175,13 @@ If neither CrossRef nor OpenAlex has an abstract for a given paper, it is **skip
 
 ## Relevance filter (embedding-based)
 
-Each fetched paper's (title + abstract) is embedded locally with `BAAI/bge-small-en-v1.5` (~130 MB ONNX, downloaded once via `fastembed` on first run) and compared via cosine similarity to a single `TOPIC_STATEMENT` vector. Papers at/above `RELEVANCE_THRESHOLD` (default **0.65**) pass to the summarizer.
+Each fetched paper's (title + abstract) is embedded locally with `BAAI/bge-small-en-v1.5` (~130 MB ONNX, downloaded once via `fastembed` on first run) and compared via cosine similarity to the active project's `topic_statement`. Papers at/above that project's `relevance_threshold` pass to the summarizer.
 
 The model runs on CPU/ANE and processes ~100 abstracts in under 2 seconds on Apple Silicon.
 
 To tune:
-- **Edit `TOPIC_STATEMENT`** in `src/papertracker/config.py` to reflect your interests. The more specific (and longer), the better the discrimination.
-- **Edit `RELEVANCE_THRESHOLD`** (or pass `--threshold 0.7` per run). Higher = stricter. Use `--no-summarize -v` to see scores and pick a cut point.
+- **Edit `topic_statement`** in `projects.toml` to reflect the project. The more specific (and longer), the better the discrimination.
+- **Edit `relevance_threshold`** (or pass `--threshold 0.7` per run). Higher = stricter. Use `--no-summarize -v` to see scores and pick a cut point.
 
 To inspect scores without spending LLM quota:
 ```bash
@@ -118,18 +190,23 @@ uv run papertracker --no-summarize --threshold -1 --days 14   # see all scores
 
 ## Customizing venues and categories
 
-Edit `src/papertracker/config.py`:
+Edit `projects.toml` for project-specific settings, or `papertracker.toml` for
+defaults used by profiles that omit a field:
 
-- `ARXIV_CATEGORIES`: arXiv subject categories to query.
-- `CROSSREF_QUERY_HINT`: keyword string passed to CrossRef as a *ranking hint* (not a filter — it just biases CrossRef's top-100 results toward your topic).
-- `PRIORITY_VENUES`: a list of named venues with `container-title` substring patterns, used to (a) tag papers with a `★ Venue` badge in the digest, (b) optionally restrict output via `--priority-venues-only`, and (c) drive the `journal_rss` source when an `rss` URL is included.
+- `arxiv_categories`: arXiv subject categories to query.
+- `crossref_query_hint`: keyword string passed to CrossRef as a *ranking hint* (not a filter — it just biases CrossRef's results toward your topic).
+- `priority_venues`: a list of named venues with `container-title` substring patterns, used to (a) tag papers with a `★ Venue` badge in the digest, (b) optionally restrict output via `--priority-venues-only`, and (c) drive the `journal_rss` source when an `rss` URL is included.
 
 ## Outputs
 
 ```
 digests/
-└── 2026-05-22.md         # ## ★ Priority venues, then ## arXiv preprints, then ## Other ACM / IEEE
-.seen_papers.json         # canonical IDs of papers already summarized (gitignored)
+└── xr-agents/
+    └── 2026-05-22.md     # ## ★ Priority venues, then ## arXiv preprints, then ## Other ACM / IEEE
+.papertracker/
+└── xr-agents/
+    ├── seen.json         # canonical IDs already summarized for this project
+    └── summary_cache.json
 ```
 
 ## Troubleshooting
@@ -138,9 +215,9 @@ digests/
 |---|---|
 | `'claude' not found on PATH` | Install Claude Code: <https://claude.com/code>, then `claude login`. |
 | `'codex' not found on PATH` | `npm install -g @openai/codex` (or `brew install --cask codex`), then `codex login`. |
-| Empty digest every day | Lower `--threshold` (e.g. 0.55) or widen `TOPIC_STATEMENT` in `config.py`; also try `--days 7`. |
-| Too much noise in digest | Raise `--threshold` (e.g. 0.7) or sharpen `TOPIC_STATEMENT`. |
-| Log says `capped at 500 of N total` | Bump `MAX_RESULTS_PER_QUERY` in `config.py` (default 500). Embedding is local so the only cost is HTTP roundtrips. |
+| Empty digest every day | Lower `--threshold` (e.g. 0.55) or widen the project's `topic_statement`; also try `--days 7`. |
+| Too much noise in digest | Raise `--threshold` (e.g. 0.7) or sharpen the project's `topic_statement`. |
+| Log says `capped at 500 of N total` | Bump `max_results_per_query` in `papertracker.toml`. Embedding is local so the only cost is HTTP roundtrips. |
 | First run is slow | First call downloads the ~130 MB embedding model into fastembed's cache. Cached thereafter. |
-| Re-summarize a paper you already saw | `--ignore-seen` (or delete `.seen_papers.json`). |
+| Re-summarize a paper you already saw | `--ignore-seen` (or delete that project's `.papertracker/<project-id>/seen.json`). |
 | Want to inspect matches without spending quota | `--no-summarize` (sorts by relevance score). |
