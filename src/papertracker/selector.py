@@ -23,6 +23,10 @@ RED = "\033[31m"
 RESET = "\033[0m"
 
 
+class SelectionError(ValueError):
+    """Raised when a submitted summary template ID is not available."""
+
+
 def _score_color(score: float) -> str:
     """ANSI color for the text fallback (same thresholds as the digest)."""
     if score >= 0.75:
@@ -56,18 +60,20 @@ def _meta(paper: dict) -> str:
     return f"{source} · {venue} · {published}" if venue else f"{source} · {published}"
 
 
-def select_papers(papers: list[dict]) -> list[dict]:
+def select_papers(
+    papers: list[dict], template_ids: list[str], default_template: str
+) -> list[dict]:
     """Return the subset the user picks, in relevance-sorted order."""
     if not papers:
         return []
     ordered = _ordered(papers)
     if sys.stdin.isatty():
         try:
-            return _select_html(ordered)
+            return _select_html(ordered, template_ids, default_template)
         except Exception as e:  # noqa: BLE001 — any UI failure degrades to text
             print(f"  (browser selector unavailable: {e}; falling back to text)")
-            return _select_fallback(ordered)
-    return _select_fallback(ordered)
+            return _select_fallback(ordered, template_ids, default_template)
+    return _select_fallback(ordered, template_ids, default_template)
 
 
 def select_related_work_candidates(papers: list[dict], facets: list) -> list[dict]:
@@ -88,8 +94,13 @@ def select_related_work_candidates(papers: list[dict], facets: list) -> list[dic
 # HTML (localhost server) path
 # --------------------------------------------------------------------------- #
 
-def _selections_from_form(form: dict[str, list[str]], n: int) -> list[tuple[int, str]]:
-    """Map a parsed POST form to a sorted list of (index, mode) pairs."""
+def _selections_from_form(
+    form: dict[str, list[str]],
+    n: int,
+    template_ids: list[str],
+    default_template: str,
+) -> list[tuple[int, str]]:
+    """Map a parsed POST form to sorted (index, template ID) pairs."""
     if "cancel" in form:
         return []
     out: list[tuple[int, str]] = []
@@ -99,14 +110,19 @@ def _selections_from_form(form: dict[str, list[str]], n: int) -> list[tuple[int,
         i = int(v)
         if not (0 <= i < n):
             continue
-        mode = (form.get(f"mode_{i}", ["triage"])[0]).strip().lower()
-        if mode not in ("triage", "deep"):
-            mode = "triage"
-        out.append((i, mode))
+        template_id = form.get(f"template_{i}", [default_template])[0].strip()
+        if template_id not in template_ids:
+            raise SelectionError(f"Unknown summary template {template_id!r}")
+        out.append((i, template_id))
     return sorted(out)
 
 
-def _make_server(ordered: list[dict], page: str):
+def _make_server(
+    ordered: list[dict],
+    page: str,
+    template_ids: list[str],
+    default_template: str,
+):
     """Build (but don't run) a localhost server. Returns (httpd, result).
 
     `result["selected"]` stays None until the browser POSTs, then becomes the
@@ -119,9 +135,9 @@ def _make_server(ordered: list[dict], page: str):
         def log_message(self, *args):  # silence per-request logging
             pass
 
-        def _send(self, body: str):
+        def _send(self, body: str, status: int = 200):
             data = body.encode("utf-8")
-            self.send_response(200)
+            self.send_response(status)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -137,7 +153,13 @@ def _make_server(ordered: list[dict], page: str):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", 0))
             form = parse_qs(self.rfile.read(length).decode("utf-8"))
-            result["selected"] = _selections_from_form(form, n)
+            try:
+                result["selected"] = _selections_from_form(
+                    form, n, template_ids, default_template
+                )
+            except SelectionError as exc:
+                self._send(html.escape(str(exc)), status=400)
+                return
             self._send(_done_html(len(result["selected"])))
 
     httpd = http.server.HTTPServer(("127.0.0.1", 0), Handler)
@@ -211,9 +233,11 @@ def _make_related_server(ordered: list[dict], facets: list, page: str):
     return httpd, result
 
 
-def _select_html(ordered: list[dict]) -> list[dict]:
-    page = _render_html(ordered)
-    httpd, result = _make_server(ordered, page)
+def _select_html(
+    ordered: list[dict], template_ids: list[str], default_template: str
+) -> list[dict]:
+    page = _render_html(ordered, template_ids, default_template)
+    httpd, result = _make_server(ordered, page, template_ids, default_template)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     print(f"  Opening paper selector in your browser: {url}")
     print("  Pick papers there and click “Summarize selected” (or Ctrl-C to cancel).")
@@ -227,9 +251,9 @@ def _select_html(ordered: list[dict]) -> list[dict]:
     finally:
         httpd.server_close()
     out = []
-    for i, mode in (result["selected"] or []):
+    for i, template_id in (result["selected"] or []):
         paper = dict(ordered[i])
-        paper["mode"] = mode
+        paper["template"] = template_id
         out.append(paper)
     return out
 
@@ -276,7 +300,7 @@ main{max-width:900px;margin:0 auto;padding:18px 20px 60px;display:flex;flex-dire
 .card:has(input:checked){border-color:#2ea043;background:#0f2419}
 .card input{margin-top:3px;width:18px;height:18px;flex:none;cursor:pointer}
 .pick{display:flex;flex-direction:column;gap:6px;align-items:center;flex:none}
-.mode{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:5px;font:inherit;font-size:12px;padding:2px 4px;cursor:pointer}
+.select-control{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:5px;font:inherit;font-size:12px;padding:2px 4px;cursor:pointer}
 .body{flex:1;min-width:0}
 .title{font-size:16px;font-weight:600;line-height:1.35}
 .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#8b949e;font-size:13px;margin-top:5px}
@@ -304,7 +328,9 @@ updateCount();
 """
 
 
-def _card(i: int, paper: dict) -> str:
+def _card(
+    i: int, paper: dict, template_ids: list[str], default_template: str
+) -> str:
     score = paper.get("relevance_score") or 0.0
     title = html.escape(paper.get("title") or "(untitled)")
     authors = paper.get("authors") or []
@@ -315,14 +341,18 @@ def _card(i: int, paper: dict) -> str:
     meta = html.escape(f"{author_str} · {_meta(paper)}")
     url = html.escape(paper.get("url") or "#", quote=True)
     abstract = html.escape((paper.get("abstract") or "").strip()) or "(no abstract)"
+    template_options = "".join(
+        f'<option value="{html.escape(template_id, quote=True)}"'
+        f'{" selected" if template_id == default_template else ""}>'
+        f'{html.escape(template_id)}</option>'
+        for template_id in template_ids
+    )
     return (
         f'<label class="card">'
         f'<div class="pick">'
         f'<input type="checkbox" name="sel" value="{i}">'
-        f'<select name="mode_{i}" class="mode" onclick="event.stopPropagation()">'
-        f'<option value="triage">Triage</option>'
-        f'<option value="deep">Deep (Obsidian)</option>'
-        f'</select>'
+        f'<select name="template_{i}" class="select-control" onclick="event.stopPropagation()">'
+        f'{template_options}</select>'
         f'</div>'
         f'<div class="body">'
         f'<div class="title">{title}</div>'
@@ -382,8 +412,8 @@ def _related_card(i: int, paper: dict, facets: list) -> str:
         f'<span>{meta}</span><span>Basis: {evidence}</span>'
         f'</div>'
         f'<div class="controls">'
-        f'<select name="facet_{i}" class="mode" onclick="event.stopPropagation()">{facet_options}</select>'
-        f'<select name="role_{i}" class="mode" onclick="event.stopPropagation()">{role_options}</select>'
+        f'<select name="facet_{i}" class="select-control" onclick="event.stopPropagation()">{facet_options}</select>'
+        f'<select name="role_{i}" class="select-control" onclick="event.stopPropagation()">{role_options}</select>'
         f'</div>'
         f'<p class="annotation"><b>Why cite:</b> {why}</p>'
         f'<p class="annotation"><b>Differs:</b> {diff}</p>'
@@ -392,8 +422,13 @@ def _related_card(i: int, paper: dict, facets: list) -> str:
     )
 
 
-def _render_html(ordered: list[dict]) -> str:
-    cards = "\n".join(_card(i, p) for i, p in enumerate(ordered))
+def _render_html(
+    ordered: list[dict], template_ids: list[str], default_template: str
+) -> str:
+    cards = "\n".join(
+        _card(i, paper, template_ids, default_template)
+        for i, paper in enumerate(ordered)
+    )
     header = (
         '<header>'
         '<h1>PaperTracker — select papers to summarize</h1>'
@@ -462,7 +497,9 @@ def _done_html(n: int) -> str:
 # Non-TTY text fallback
 # --------------------------------------------------------------------------- #
 
-def _select_fallback(ordered: list[dict]) -> list[dict]:
+def _select_fallback(
+    ordered: list[dict], template_ids: list[str], default_template: str
+) -> list[dict]:
     use_color = sys.stdout.isatty()
     bold = BOLD if use_color else ""
     dim = DIM if use_color else ""
@@ -476,13 +513,21 @@ def _select_fallback(ordered: list[dict]) -> list[dict]:
             f"  {dim}{_meta(p)}{reset}"
         )
     try:
-        raw = input("Pick papers (e.g. '1,3' triage, '2d' deep; 'a'=all triage, enter=none): ")
+        raw = input(
+            f"Pick papers (e.g. '1,3', '2:{template_ids[0]}'; "
+            f"'a'=all; default={default_template}; enter=none): "
+        )
     except EOFError:
         raw = ""
     out = []
-    for i, mode in _parse_selection(raw, len(ordered)):
+    try:
+        picks = _parse_selection(raw, len(ordered), template_ids, default_template)
+    except SelectionError as exc:
+        print(f"  Invalid selection: {exc}")
+        return []
+    for i, template_id in picks:
         paper = dict(ordered[i])
-        paper["mode"] = mode
+        paper["template"] = template_id
         out.append(paper)
     return out
 
@@ -503,42 +548,44 @@ def _select_related_fallback(ordered: list[dict]) -> list[dict]:
         raw = input("Pick final bibliography papers (e.g. '1,3', 'a'=all, enter=none): ")
     except EOFError:
         raw = ""
-    picks = _parse_selection(raw, len(ordered))
+    picks = _parse_selection(raw, len(ordered), ["default"], "default")
     return [
         {
             "canonical_id": ordered[i].get("canonical_id"),
             "primary_facet": ordered[i].get("primary_facet"),
             "role": ordered[i].get("role") or "background",
         }
-        for i, _mode in picks
+        for i, _template in picks
     ]
 
 
-def _parse_selection(raw: str, n: int) -> list[tuple[int, str]]:
-    """Parse '1,3d', '1-3', 'a'/'all', '' into sorted (0-based index, mode) pairs.
-
-    A trailing 'd' on a token marks deep mode; otherwise triage. 'a'/'all' = all triage.
-    """
-    raw = raw.strip().lower()
+def _parse_selection(
+    raw: str, n: int, template_ids: list[str], default_template: str
+) -> list[tuple[int, str]]:
+    """Parse selections into sorted (0-based index, template ID) pairs."""
+    raw = raw.strip()
     if not raw:
         return []
-    if raw in ("a", "all"):
-        return [(i, "triage") for i in range(n)]
+    if raw.lower() in ("a", "all"):
+        return [(i, default_template) for i in range(n)]
     chosen: dict[int, str] = {}
-    for tok in raw.replace(" ", "").split(","):
+    for token in raw.split(","):
+        tok = token.strip()
         if not tok:
             continue
-        mode = "triage"
-        if tok.endswith("d"):
-            mode, tok = "deep", tok[:-1]
-        if "-" in tok:
-            lo, _, hi = tok.partition("-")
+        index_token, separator, selected = tok.partition(":")
+        template_id = selected.strip() if separator else default_template
+        if template_id not in template_ids:
+            raise SelectionError(f"Unknown summary template {template_id!r}")
+        index_token = index_token.strip()
+        if "-" in index_token:
+            lo, _, hi = index_token.partition("-")
             if lo.isdigit() and hi.isdigit():
                 for v in range(int(lo), int(hi) + 1):
                     if 1 <= v <= n:
-                        chosen[v - 1] = mode
-        elif tok.isdigit():
-            v = int(tok)
+                        chosen[v - 1] = template_id
+        elif index_token.isdigit():
+            v = int(index_token)
             if 1 <= v <= n:
-                chosen[v - 1] = mode
+                chosen[v - 1] = template_id
     return sorted(chosen.items())

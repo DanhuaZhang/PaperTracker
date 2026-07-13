@@ -73,13 +73,40 @@ USER_AGENT = (
     else USER_AGENT_NAME
 )
 OPENALEX_API_KEY = os.environ.get("PAPERTRACKER_OPENALEX_API_KEY", "").strip()
+SEMANTIC_SCHOLAR_API_KEY = os.environ.get(
+    "PAPERTRACKER_SEMANTIC_SCHOLAR_API_KEY", ""
+).strip()
+CORE_API_KEY = os.environ.get("PAPERTRACKER_CORE_API_KEY", "").strip()
+OPENCITATIONS_ACCESS_TOKEN = os.environ.get(
+    "PAPERTRACKER_OPENCITATIONS_ACCESS_TOKEN", ""
+).strip()
+
+
+def _env_source_list(name: str, default: str) -> tuple[str, ...]:
+    raw = os.environ.get(name, default)
+    return tuple(part.strip().lower() for part in raw.split(",") if part.strip())
+
+
+ABSTRACT_FALLBACK_SOURCES = _env_source_list(
+    "PAPERTRACKER_ABSTRACT_FALLBACKS",
+    "openalex,semantic_scholar,openaire,core,europe_pmc,datacite",
+)
+DOI_ENRICHMENT_SOURCES = _env_source_list(
+    "PAPERTRACKER_DOI_ENRICHERS",
+    "unpaywall,opencitations,dblp,datacite",
+)
 
 # Embedding-based relevance filter (replaces the old keyword filter).
 # Each paper's (title + abstract) is embedded with the model below and compared
 # to the TOPIC_STATEMENT vector via cosine similarity. Papers scoring at or above
 # RELEVANCE_THRESHOLD are kept.
 EMBEDDING_MODEL = _cfg("embedding_model")
+RELEVANCE_SCORER = _cfg("relevance_scorer")
 RELEVANCE_THRESHOLD = _cfg("relevance_threshold")
+HYBRID_RELEVANCE_THRESHOLD = _cfg("hybrid_relevance_threshold")
+ENABLE_RERANKER = _cfg("enable_reranker")
+RERANKER_MODEL = _cfg("reranker_model")
+RERANKER_TOP_K = _cfg("reranker_top_k")
 
 TOPIC_STATEMENT = _cfg("topic_statement")
 
@@ -110,6 +137,8 @@ SEEN_PAPERS_FILE = _cfg("seen_papers_file")
 SUMMARY_CACHE_FILE = _cfg("summary_cache_file")
 SUMMARY_TIMEOUT_SEC = _cfg("summary_timeout_sec")
 ENABLED_SOURCES_DEFAULT = _cfg("enabled_sources_default")
+SUMMARY_TEMPLATE_DIR = _cfg("summary_template_dir")
+DEFAULT_SUMMARY_TEMPLATE = _cfg("default_summary_template")
 
 
 @dataclass(frozen=True)
@@ -128,6 +157,11 @@ class ProjectProfile:
     digest_dir: str
     seen_papers_file: str
     summary_cache_file: str
+    relevance_scorer: str = "dense"
+    hybrid_relevance_threshold: float = 0.60
+    enable_reranker: bool = False
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_top_k: int = 100
     contribution_statement: str | None = None
     related_work_facets: list[related_work.RelatedWorkFacet] = field(default_factory=list)
 
@@ -144,6 +178,13 @@ def _optional_str(value) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _relevance_scorer(value) -> str:
+    scorer = str(value or "").strip().lower()
+    if scorer not in {"dense", "hybrid"}:
+        raise ConfigError("relevance_scorer must be 'dense' or 'hybrid'")
+    return scorer
 
 
 def _project_state_path(project_id: str, filename: str) -> str:
@@ -177,6 +218,13 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
         crossref_query_hint=_profile_value(raw, "crossref_query_hint", CROSSREF_QUERY_HINT),
         arxiv_categories=list(_profile_value(raw, "arxiv_categories", ARXIV_CATEGORIES)),
         relevance_threshold=float(_profile_value(raw, "relevance_threshold", RELEVANCE_THRESHOLD)),
+        relevance_scorer=_relevance_scorer(_profile_value(raw, "relevance_scorer", RELEVANCE_SCORER)),
+        hybrid_relevance_threshold=float(
+            _profile_value(raw, "hybrid_relevance_threshold", HYBRID_RELEVANCE_THRESHOLD)
+        ),
+        enable_reranker=bool(_profile_value(raw, "enable_reranker", ENABLE_RERANKER)),
+        reranker_model=str(_profile_value(raw, "reranker_model", RERANKER_MODEL)),
+        reranker_top_k=int(_profile_value(raw, "reranker_top_k", RERANKER_TOP_K)),
         priority_venues=list(_profile_value(raw, "priority_venues", PRIORITY_VENUES)),
         priority_venue_only=bool(_profile_value(raw, "priority_venue_only", PRIORITY_VENUE_ONLY)),
         enabled_sources_default=list(
@@ -207,6 +255,11 @@ def legacy_profile() -> ProjectProfile:
         crossref_query_hint=CROSSREF_QUERY_HINT,
         arxiv_categories=list(ARXIV_CATEGORIES),
         relevance_threshold=RELEVANCE_THRESHOLD,
+        relevance_scorer=_relevance_scorer(RELEVANCE_SCORER),
+        hybrid_relevance_threshold=HYBRID_RELEVANCE_THRESHOLD,
+        enable_reranker=ENABLE_RERANKER,
+        reranker_model=RERANKER_MODEL,
+        reranker_top_k=RERANKER_TOP_K,
         priority_venues=list(PRIORITY_VENUES),
         priority_venue_only=PRIORITY_VENUE_ONLY,
         enabled_sources_default=list(ENABLED_SOURCES_DEFAULT),
@@ -277,15 +330,24 @@ def zotero_linked_base_dir() -> Path | None:
     return Path(default).expanduser() if default else None
 
 
-# --- Obsidian deep-summary template ----------------------------------------
-DEFAULT_OBSIDIAN_TEMPLATE = _cfg("obsidian_template")
+# --- Markdown summary templates -------------------------------------------
+def summary_template_catalog():
+    """Discover configured templates and return (all templates, default)."""
+    from . import summary_templates
+
+    directory = Path(SUMMARY_TEMPLATE_DIR).expanduser()
+    if not directory.is_absolute():
+        directory = PROJECT_CONFIG_PATH.parent / directory
+    return summary_templates.discover(directory, DEFAULT_SUMMARY_TEMPLATE)
 
 
-# Path to the user's Obsidian paper-note template. When unset, DEFAULT below is used.
-def obsidian_template() -> str:
-    env = os.environ.get("PAPERTRACKER_OBSIDIAN_TEMPLATE")
-    if env:
-        p = Path(env).expanduser()
-        if p.exists():
-            return p.read_text(encoding="utf-8")
-    return DEFAULT_OBSIDIAN_TEMPLATE
+def summary_template(template_id: str):
+    """Return a configured template by its case-sensitive filename stem."""
+    templates, _default = summary_template_catalog()
+    for template in templates:
+        if template.id == template_id:
+            return template
+    choices = ", ".join(template.id for template in templates)
+    raise ConfigError(
+        f"Unknown summary template {template_id!r}. Available templates: {choices}"
+    )

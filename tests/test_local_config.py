@@ -6,7 +6,7 @@ from papertracker import settings
 def test_provider_and_model_fall_back_to_local_config(tmp_path, monkeypatch):
     project_cfg = tmp_path / "papertracker.toml"
     project_cfg.write_text(
-        'provider = "codex"\nmodel = "gpt-test-local"\n',
+        'provider = "codex"\nclaude_model = "sonnet-local"\ncodex_model = "gpt-test-local"\n',
         encoding="utf-8",
     )
     user_cfg = tmp_path / "missing-user-config.toml"
@@ -29,12 +29,12 @@ def test_provider_and_model_fall_back_to_local_config(tmp_path, monkeypatch):
 def test_user_config_overrides_local_config(tmp_path, monkeypatch):
     project_cfg = tmp_path / "papertracker.toml"
     project_cfg.write_text(
-        'provider = "codex"\nmodel = "gpt-project"\n',
+        'provider = "codex"\nclaude_model = "sonnet-project"\ncodex_model = "gpt-project"\n',
         encoding="utf-8",
     )
     user_cfg = tmp_path / "config.toml"
     user_cfg.write_text(
-        'provider = "claude"\nmodel = "sonnet-user"\n',
+        'provider = "claude"\nclaude_model = "sonnet-user"\n',
         encoding="utf-8",
     )
 
@@ -47,12 +47,37 @@ def test_user_config_overrides_local_config(tmp_path, monkeypatch):
     assert settings.resolve_model(None, "claude") == ("sonnet-user", f"config file {user_cfg}")
 
 
-def test_config_constants_load_from_project_config(tmp_path, monkeypatch):
+def test_generic_model_key_does_not_override_provider_specific_default(tmp_path, monkeypatch):
     project_cfg = tmp_path / "papertracker.toml"
     project_cfg.write_text(
         """
 provider = "codex"
-model = "gpt-active"
+model = "stale-generic-model"
+claude_model = "sonnet-project"
+codex_model = "gpt-project"
+""".strip(),
+        encoding="utf-8",
+    )
+    user_cfg = tmp_path / "missing-user-config.toml"
+
+    monkeypatch.setattr(settings, "PROJECT_CONFIG_PATH", project_cfg)
+    monkeypatch.setattr(settings, "CONFIG_PATH", user_cfg)
+    monkeypatch.delenv("PAPERTRACKER_MODEL", raising=False)
+
+    assert settings.resolve_model(None, "codex") == (
+        "gpt-project",
+        f"project config file {project_cfg}",
+    )
+
+
+def test_config_constants_load_from_project_config(tmp_path, monkeypatch):
+    project_cfg = tmp_path / "papertracker.toml"
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir()
+    (template_dir / "Test.md").write_text("## Test", encoding="utf-8")
+    project_cfg.write_text(
+        """
+provider = "codex"
 claude_model = "haiku-test"
 codex_model = "gpt-test"
 default_days = 9
@@ -63,7 +88,12 @@ summary_cache_file = ".custom_summary_cache.json"
 summary_timeout_sec = 33
 enabled_sources_default = ["arxiv"]
 embedding_model = "test/embed"
+relevance_scorer = "hybrid"
 relevance_threshold = 0.12
+hybrid_relevance_threshold = 0.34
+enable_reranker = true
+reranker_model = "test/reranker"
+reranker_top_k = 7
 topic_statement = "test topic"
 crossref_query_hint = "test query"
 arxiv_categories = ["cs.AI"]
@@ -73,7 +103,8 @@ user_email = "local@example.com"
 user_agent_name = "papertracker-test/1.0"
 zotero_data_dir = "~/TestZotero"
 zotero_linked_base = "~/LinkedPapers"
-obsidian_template = "## Test"
+summary_template_dir = "templates"
+default_summary_template = "Test"
 """.strip(),
         encoding="utf-8",
     )
@@ -85,7 +116,6 @@ obsidian_template = "## Test"
         m.delenv("PAPERTRACKER_EMAIL", raising=False)
         m.delenv("PAPERTRACKER_ZOTERO_DIR", raising=False)
         m.delenv("PAPERTRACKER_ZOTERO_LINKED_BASE", raising=False)
-        m.delenv("PAPERTRACKER_OBSIDIAN_TEMPLATE", raising=False)
 
         loaded = importlib.reload(config)
 
@@ -100,7 +130,12 @@ obsidian_template = "## Test"
         assert loaded.SUMMARY_TIMEOUT_SEC == 33
         assert loaded.ENABLED_SOURCES_DEFAULT == ["arxiv"]
         assert loaded.EMBEDDING_MODEL == "test/embed"
+        assert loaded.RELEVANCE_SCORER == "hybrid"
         assert loaded.RELEVANCE_THRESHOLD == 0.12
+        assert loaded.HYBRID_RELEVANCE_THRESHOLD == 0.34
+        assert loaded.ENABLE_RERANKER is True
+        assert loaded.RERANKER_MODEL == "test/reranker"
+        assert loaded.RERANKER_TOP_K == 7
         assert loaded.TOPIC_STATEMENT == "test topic"
         assert loaded.CROSSREF_QUERY_HINT == "test query"
         assert loaded.ARXIV_CATEGORIES == ["cs.AI"]
@@ -110,7 +145,10 @@ obsidian_template = "## Test"
         assert loaded.USER_AGENT == "papertracker-test/1.0 (mailto:local@example.com)"
         assert str(loaded.zotero_data_dir()).endswith("TestZotero")
         assert str(loaded.zotero_linked_base_dir()).endswith("LinkedPapers")
-        assert loaded.obsidian_template() == "## Test"
+        templates, default = loaded.summary_template_catalog()
+        assert [template.id for template in templates] == ["Test"]
+        assert default.id == "Test"
+        assert default.path == template_dir / "Test.md"
 
     importlib.reload(config)
 

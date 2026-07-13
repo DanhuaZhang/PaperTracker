@@ -15,7 +15,7 @@ import time
 import requests
 
 from .. import config
-from . import openalex_client
+from . import doi_enrichment
 from ._filter import tag_venue
 
 log = logging.getLogger(__name__)
@@ -63,11 +63,11 @@ def search(
         paper = _normalize(item, source_label)
         if paper is None:
             continue
-        # Recover abstract via OpenAlex if missing
+        # Recover missing text through the configured DOI fallback chain.
         if not paper["abstract"] and paper["doi"]:
-            recovered = openalex_client.fetch_abstract(paper["doi"])
+            recovered = doi_enrichment.recover_abstract(paper["doi"])
             if recovered:
-                paper["abstract"] = recovered
+                doi_enrichment.merge_metadata(paper, recovered)
         if not paper["abstract"]:
             dropped_no_abstract += 1
             continue

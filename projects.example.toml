@@ -1,0 +1,60 @@
+# PaperTracker project profiles — EXAMPLE / TEMPLATE.
+#
+# Copy this file to `projects.toml` (which is gitignored) and edit it for your
+# own research topics:
+#
+#     cp projects.example.toml projects.toml
+#
+# Global runtime defaults (provider, sources, thresholds, output paths, Zotero,
+# summary templates) stay in `papertracker.toml`. Any field a profile omits
+# falls back to that file. Without a `projects.toml`, PaperTracker runs a single
+# legacy profile built entirely from `papertracker.toml`.
+
+# Which profile runs when you don't pass --project. Must match a profile `id`.
+default_project = "xr-agents"
+
+[[projects]]
+# `id`: lowercase slug, [a-z0-9][a-z0-9_-]*. Names the digest/state folders,
+# e.g. digests/<id>/ and .papertracker/<id>/.
+id = "xr-agents"
+name = "XR embodied agents"
+
+# `topic_statement`: the text embedded and compared (cosine similarity) against
+# each paper's title+abstract by the local relevance scorer. Longer and more
+# specific = sharper discrimination.
+topic_statement = """
+Multi-modal embodied agents perceiving, reasoning about, and acting within 3D environments - including extended reality (XR), augmented reality (AR), and virtual reality (VR). Relevant topics include vision-language models for embodied AI, 3D scene understanding, spatial reasoning over rooms and scenes, immersive interaction and mixed-reality interfaces, simulated agents in virtual worlds, embodied question answering, and gaze/gesture interaction in XR.
+"""
+
+# `crossref_query_hint`: a loose keyword string passed to CrossRef and OpenAlex
+# as a ranking hint (not a hard filter).
+crossref_query_hint = "embodied agent multimodal 3D XR VR AR spatial scene understanding interaction avatar"
+
+# `arxiv_categories`: arXiv subject categories to query.
+arxiv_categories = ["cs.CV", "cs.RO", "cs.AI", "cs.HC", "cs.GR"]
+
+# `relevance_threshold`: papers scoring at/above this (0..1) pass to the
+# summarizer. Higher = stricter. Omit to inherit papertracker.toml.
+relevance_threshold = 0.65
+
+# Optional: facets group related-work candidates when you run
+# `--related-work --facets`. Remove this block if you don't use faceted mode.
+[[projects.related_work_facets]]
+id = "scene-understanding"
+name = "3D scene understanding"
+description = "Perceiving and representing 3D scenes for embodied agents."
+query_hint = "3D scene understanding embodied perception"
+
+[[projects.related_work_facets]]
+id = "spatial-interaction"
+name = "Immersive interaction"
+description = "Interaction techniques and interfaces in AR/VR/MR."
+query_hint = "immersive interaction mixed reality interface"
+
+# Add more profiles by repeating the [[projects]] block with a new `id`.
+# [[projects]]
+# id = "another-topic"
+# name = "Another topic"
+# topic_statement = """..."""
+# crossref_query_hint = "..."
+# arxiv_categories = ["cs.AI"]

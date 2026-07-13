@@ -3,9 +3,6 @@
 
 # Active summarization defaults.
 provider = "codex"          # "claude" or "codex"
-model = "gpt-5.5"             # CLI alias or full model ID for the selected provider
-
-# Provider-specific fallback model names.
 claude_model = "sonnet"
 codex_model = "gpt-5.5"
 
@@ -16,7 +13,12 @@ user_agent_name = "papertracker/0.1"
 
 # Embedding-based relevance filter.
 embedding_model = "BAAI/bge-small-en-v1.5"
+relevance_scorer = "dense"
 relevance_threshold = 0.65
+hybrid_relevance_threshold = 0.60
+enable_reranker = false
+reranker_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+reranker_top_k = 100
 topic_statement = """
 Multi-modal embodied agents perceiving, reasoning about, and acting within 3D environments - including extended reality (XR), augmented reality (AR), and virtual reality (VR). Relevant topics include: vision-language models for embodied AI, 3D scene understanding, spatial reasoning over rooms and scenes, immersive interaction and mixed-reality interfaces, simulated agents in virtual worlds, embodied question answering, robot learning with multi-modal sensors, scene graphs and neural rendering for embodied perception, world models for navigation and manipulation, spatial interaction and spatial awareness in immersive environments, 3D avatars, and gaze/gesture interaction in XR.
 """
@@ -39,21 +41,9 @@ summary_timeout_sec = 180
 zotero_data_dir = "~/Zotero"
 zotero_linked_base = ""
 
-# Obsidian deep-summary template.
-obsidian_template = """
----
-title:
-authors:
-year:
-venue:
-tags: [paper]
----
-## TL;DR
-## Problem
-## Method
-## Results
-## My take / relevance to my work
-"""
+# Markdown summary skeletons.
+summary_template_dir = "summary_templates"
+default_summary_template = "triage"
 
 [[priority_venues]]
 name = "IEEE VR"

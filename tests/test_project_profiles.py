@@ -45,6 +45,8 @@ relevance_threshold = 0.6
     assert profile.topic_statement == "memory for embodied agents"
     assert profile.crossref_query_hint == "embodied memory navigation"
     assert profile.arxiv_categories == ["cs.AI"]
+    assert profile.relevance_scorer == config.RELEVANCE_SCORER
+    assert profile.hybrid_relevance_threshold == config.HYBRID_RELEVANCE_THRESHOLD
     assert profile.priority_venues == config.PRIORITY_VENUES
     assert profile.digest_dir == "digests/agent-memory"
     assert profile.seen_papers_file == ".papertracker/agent-memory/seen.json"

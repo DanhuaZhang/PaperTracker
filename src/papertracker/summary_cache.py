@@ -1,4 +1,4 @@
-"""Persistent cache of generated summaries, keyed by canonical_id.
+"""Persistent cache of generated summaries, keyed by paper and template ID.
 
 Avoids re-spending LLM tokens on papers already summarized in a previous run
 (including ``--ignore-seen`` backfills, where seen-filtering is disabled but the
@@ -6,8 +6,9 @@ summary text is still reusable). Mirrors the JSON load/save pattern in ``dedup.p
 
 Schema::
 
-    {"arxiv:2401.12345": {"summary": "- ...", "model": "sonnet",
-                          "provider": "claude", "generated": "2026-05-23"}}
+    {"arxiv:2401.12345::triage": {"summary": "- ...", "model": "sonnet",
+                                   "provider": "claude", "template": "triage",
+                                   "generated": "2026-05-23"}}
 """
 from __future__ import annotations
 
@@ -29,16 +30,16 @@ def load(path: Path) -> dict[str, dict]:
         return {}
 
 
-def cache_key(canonical_id: str, mode: str) -> str:
-    return f"{canonical_id}::{mode}"
+def cache_key(canonical_id: str, template_id: str) -> str:
+    return f"{canonical_id}::{template_id}"
 
 
-def lookup(cache: dict[str, dict], paper: dict, mode: str) -> str | None:
+def lookup(cache: dict[str, dict], paper: dict, template_id: str) -> str | None:
     """Return a cached summary if this paper — under its canonical_id or any of its
-    cross-source merged_ids, for the given mode — has one. None means it must be
+    cross-source merged_ids, for the given template — has one. None means it must be
     (re)generated."""
     for cid in paper.get("merged_ids", [paper["canonical_id"]]):
-        entry = cache.get(cache_key(cid, mode))
+        entry = cache.get(cache_key(cid, template_id))
         if entry and entry.get("summary"):
             return entry["summary"]
     return None

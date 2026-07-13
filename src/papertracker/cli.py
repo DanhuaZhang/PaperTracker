@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import logging
 import math
+import re
 import subprocess
 import sys
 import time
@@ -22,8 +23,16 @@ from . import (
     settings,
     summarizer,
     summary_cache,
+    zotero,
 )
-from .sources import acm_client, arxiv_client, ieee_client, journal_rss, openalex_client
+from .sources import (
+    acm_client,
+    arxiv_client,
+    doi_enrichment,
+    ieee_client,
+    journal_rss,
+    openalex_client,
+)
 
 log = logging.getLogger("papertracker")
 
@@ -132,9 +141,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--threshold", type=float, default=None,
         help=(
-            "Cosine-similarity threshold for the embedding relevance filter "
-            f"(default {config.RELEVANCE_THRESHOLD}). Lower = looser, higher = stricter."
+            "Override the active relevance threshold. Lower = looser, higher = stricter."
         ),
+    )
+    p.add_argument(
+        "--scorer",
+        choices=("dense", "hybrid"),
+        default=None,
+        help="Relevance scorer to use. 'dense' is the original cosine-only scorer.",
     )
     p.add_argument(
         "--ignore-seen", action="store_true",
@@ -153,6 +167,29 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Interactively pick which matched papers to summarize via a browser "
              "UI (numbered text prompt when headless), then summarize only those. "
              "Overrides --no-summarize.",
+    )
+    p.add_argument(
+        "--list-zotero-collections",
+        action="store_true",
+        help="List local Zotero collection paths and exit.",
+    )
+    p.add_argument(
+        "--zotero-collection",
+        default=None,
+        help="Batch-summarize PDFs attached to this Zotero collection path.",
+    )
+    p.add_argument(
+        "--zotero-include-subcollections",
+        action="store_true",
+        help="Include PDFs from child collections when using --zotero-collection.",
+    )
+    p.add_argument(
+        "--zotero-template",
+        default=config.DEFAULT_SUMMARY_TEMPLATE,
+        help=(
+            "Summary template ID for --zotero-collection "
+            f"(default {config.DEFAULT_SUMMARY_TEMPLATE})."
+        ),
     )
     p.add_argument(
         "-v", "--verbose", action="store_true",
@@ -242,9 +279,43 @@ def _resolve_profiles(args: argparse.Namespace) -> tuple[list[config.ProjectProf
 
 
 def _effective_profile(profile: config.ProjectProfile, args: argparse.Namespace) -> config.ProjectProfile:
+    updates = {}
     if args.priority_venues_only and not profile.priority_venue_only:
-        return replace(profile, priority_venue_only=True)
-    return profile
+        updates["priority_venue_only"] = True
+    scorer = getattr(args, "scorer", None)
+    if scorer is not None:
+        updates["relevance_scorer"] = scorer
+    return replace(profile, **updates) if updates else profile
+
+
+def _active_threshold(profile: config.ProjectProfile, args: argparse.Namespace) -> float:
+    if args.threshold is not None:
+        return args.threshold
+    if profile.relevance_scorer == "hybrid":
+        return profile.hybrid_relevance_threshold
+    return profile.relevance_threshold
+
+
+def _score_kwargs(profile: config.ProjectProfile) -> dict:
+    return {
+        "mode": profile.relevance_scorer,
+        "enable_reranker": profile.enable_reranker,
+        "reranker_model": profile.reranker_model,
+        "reranker_top_k": profile.reranker_top_k,
+    }
+
+
+def _enrich_doi_papers(papers: list[dict]) -> list[dict]:
+    """Add optional OA, citation, and bibliographic metadata to selected papers."""
+    for paper in papers:
+        if paper.get("doi"):
+            doi_enrichment.enrich_paper(paper)
+    return papers
+
+
+def _summary_template_options() -> tuple[list[str], str]:
+    templates, default = config.summary_template_catalog()
+    return [template.id for template in templates], default.id
 
 
 def _run_profile(
@@ -265,6 +336,11 @@ def _run_profile(
         "Sources: %s | window=%s..%s | cap=%d/source",
         ", ".join(sources), start_date, end_date, config.MAX_RESULTS_PER_QUERY,
     )
+    log.info(
+        "Relevance scorer: %s | threshold=%.3f",
+        profile.relevance_scorer,
+        _active_threshold(profile, args),
+    )
 
     fetched = _fetch_all(sources, start_date, end_date, profile)
     log.info("Total fetched (pre-dedup): %d", len(fetched))
@@ -272,11 +348,15 @@ def _run_profile(
     deduped = dedup.deduplicate_across_sources(fetched)
     log.info("After cross-source dedup: %d", len(deduped))
 
-    threshold = args.threshold if args.threshold is not None else profile.relevance_threshold
+    threshold = _active_threshold(profile, args)
     relevant = relevance.filter_papers(
         deduped,
         threshold=threshold,
         topic_statement=profile.topic_statement,
+        scorer=profile.relevance_scorer,
+        enable_reranker=profile.enable_reranker,
+        reranker_model=profile.reranker_model,
+        reranker_top_k=profile.reranker_top_k,
     )
 
     seen_path = Path(profile.seen_papers_file)
@@ -285,12 +365,16 @@ def _run_profile(
         p for p in relevant
         if not (seen & set(p.get("merged_ids", [p["canonical_id"]])))
     ]
+    _enrich_doi_papers(new_papers)
     log.info("New (unseen) papers: %d", len(new_papers))
 
     today_str = dt.date.today().isoformat()
 
     if args.select:
-        to_summarize = selector.select_papers(new_papers)
+        template_ids, default_template = _summary_template_options()
+        to_summarize = selector.select_papers(
+            new_papers, template_ids, default_template
+        )
         if not to_summarize:
             log.info("No papers selected — nothing summarized.")
             return 0
@@ -302,9 +386,10 @@ def _run_profile(
         _print_paper_list(new_papers, profile)
         return 0
     else:
+        _template_ids, default_template = _summary_template_options()
         to_summarize = new_papers
         for p in to_summarize:
-            p.setdefault("mode", "triage")
+            p.setdefault("template", default_template)
 
     if not to_summarize:
         content = digest_writer.render_empty_digest(today_str, profile)
@@ -319,25 +404,48 @@ def _run_profile(
 
     pairs: list[tuple[dict, str]] = []
     for i, paper in enumerate(to_summarize, 1):
-        mode = paper.get("mode", "triage")
-        cached = None if args.refresh_summaries else summary_cache.lookup(cache, paper, mode)
+        template_id = paper.get("template", default_template)
+        cached = (
+            None
+            if args.refresh_summaries
+            else summary_cache.lookup(cache, paper, template_id)
+        )
         if cached is not None:
             cache_hits += 1
-            log.info("Cached [%d/%d] (%s) %s", i, len(to_summarize), mode, paper["title"][:60])
+            log.info(
+                "Cached [%d/%d] (%s) %s",
+                i,
+                len(to_summarize),
+                template_id,
+                paper["title"][:60],
+            )
             pairs.append((paper, cached))
             continue
 
-        log.info("Summarizing [%d/%d] (%s) %s", i, len(to_summarize), mode, paper["title"][:60])
+        log.info(
+            "Summarizing [%d/%d] (%s) %s",
+            i,
+            len(to_summarize),
+            template_id,
+            paper["title"][:60],
+        )
         try:
-            summary = summarizer.summarize_paper(paper, provider, model, mode, profile)
-            new_cache_entries[summary_cache.cache_key(paper["canonical_id"], mode)] = {
+            summary = summarizer.summarize_paper(
+                paper, provider, model, template_id, profile
+            )
+            new_cache_entries[
+                summary_cache.cache_key(paper["canonical_id"], template_id)
+            ] = {
                 "summary": summary, "model": model,
-                "provider": provider, "mode": mode, "generated": today_str,
+                "provider": provider, "template": template_id, "generated": today_str,
             }
         except subprocess.CalledProcessError as e:
             reason = (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
             log.error("Failed: %s — %s", paper["canonical_id"], reason)
             summary = f'_"(summary failed: {reason})"_'
+        except summarizer.PdfTextExtractionError as e:
+            log.error("Failed: %s — %s", paper["canonical_id"], e)
+            summary = f'_"(summary failed: {e})"_'
         except subprocess.TimeoutExpired:
             log.error("Timeout: %s", paper["canonical_id"])
             summary = '_"(summary failed: timeout)"_'
@@ -364,13 +472,13 @@ def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Nam
     label = profile.id or "legacy"
     cap = args.max_results if args.max_results is not None else min(config.MAX_RESULTS_PER_QUERY, 200)
     limit = max(1, args.limit)
-    threshold = args.threshold if args.threshold is not None else profile.relevance_threshold
+    threshold = _active_threshold(profile, args)
     today_str = dt.date.today().isoformat()
 
     log.info("Project: %s (%s)", profile.name, label)
     log.info(
-        "Related work: OpenAlex cap=%d | limit=%d | threshold=%.3f",
-        cap, limit, threshold,
+        "Related work: OpenAlex cap=%d | limit=%d | scorer=%s | threshold=%.3f",
+        cap, limit, profile.relevance_scorer, threshold,
     )
 
     fetched = openalex_client.fetch_related_work(profile, cap=cap)
@@ -381,7 +489,10 @@ def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Nam
     log.info("Related work kept: %d", len(ranked))
 
     if args.select:
-        to_summarize = selector.select_papers(ranked)
+        template_ids, default_template = _summary_template_options()
+        to_summarize = selector.select_papers(
+            ranked, template_ids, default_template
+        )
         if not to_summarize:
             log.info("No papers selected — writing unsummarized related-work digest.")
             pairs: list[tuple[dict, str | None]] = [(p, None) for p in ranked]
@@ -414,7 +525,7 @@ def _run_faceted_related_work_profile(profile: config.ProjectProfile, args: argp
     profile = _effective_profile(profile, args)
     label = profile.id or "legacy"
     limit = max(1, args.limit)
-    threshold = args.threshold if args.threshold is not None else profile.relevance_threshold
+    threshold = _active_threshold(profile, args)
     today_str = dt.date.today().isoformat()
 
     provider, model, code = _resolve_llm(args)
@@ -423,10 +534,11 @@ def _run_faceted_related_work_profile(profile: config.ProjectProfile, args: argp
 
     log.info("Project: %s (%s)", profile.name, label)
     log.info(
-        "Faceted related work: facet_count=%d | facet_candidates=%d | limit=%d | threshold=%.3f",
+        "Faceted related work: facet_count=%d | facet_candidates=%d | limit=%d | scorer=%s | threshold=%.3f",
         args.facet_count,
         args.facet_candidates,
         limit,
+        profile.relevance_scorer,
         threshold,
     )
 
@@ -495,16 +607,17 @@ def _rank_related_work(
         f"{p.get('title', '')}. {p.get('abstract', '')}".strip()
         for p in papers
     ]
-    scores = relevance.score_batch(texts, topic_statement=profile.topic_statement)
+    scores = relevance.score_texts(profile.topic_statement, texts, **_score_kwargs(profile))
     max_citations = max(1, max(int(p.get("cited_by_count") or 0) for p in papers))
     kept: list[dict] = []
-    for paper, rel_score in zip(papers, scores):
+    for paper, score in zip(papers, scores):
+        rel_score = score.final_score
         citations = int(paper.get("cited_by_count") or 0)
         citation_score = math.log1p(citations) / math.log1p(max_citations)
         discovery_sources = set(paper.get("discovery_sources") or [])
         channel_bonus = min(max(len(discovery_sources) - 1, 0), 2) * 0.03
         semantic_bonus = 0.03 if "semantic" in discovery_sources else 0.0
-        paper["relevance_score"] = rel_score
+        relevance.annotate_score_fields(paper, score)
         paper["related_work_score"] = (
             (0.70 * rel_score)
             + (0.24 * citation_score)
@@ -526,28 +639,40 @@ def _summarize_selected_related_work(
     model: str,
     today_str: str,
 ) -> list[tuple[dict, str | None]]:
+    _template_ids, default_template = _summary_template_options()
     cache_path = Path(profile.summary_cache_file)
     cache = {} if args.refresh_summaries else summary_cache.load(cache_path)
     new_cache_entries: dict[str, dict] = {}
     pairs: list[tuple[dict, str | None]] = []
     for i, paper in enumerate(to_summarize, 1):
-        mode = paper.get("mode", "triage")
-        cached = None if args.refresh_summaries else summary_cache.lookup(cache, paper, mode)
+        template_id = paper.get("template", default_template)
+        cached = (
+            None
+            if args.refresh_summaries
+            else summary_cache.lookup(cache, paper, template_id)
+        )
         if cached is not None:
-            log.info("Cached [%d/%d] (%s) %s", i, len(to_summarize), mode, paper["title"][:60])
+            log.info("Cached [%d/%d] (%s) %s", i, len(to_summarize), template_id, paper["title"][:60])
             pairs.append((paper, cached))
             continue
-        log.info("Summarizing [%d/%d] (%s) %s", i, len(to_summarize), mode, paper["title"][:60])
+        log.info("Summarizing [%d/%d] (%s) %s", i, len(to_summarize), template_id, paper["title"][:60])
         try:
-            summary = summarizer.summarize_paper(paper, provider, model, mode, profile)
-            new_cache_entries[summary_cache.cache_key(paper["canonical_id"], mode)] = {
+            summary = summarizer.summarize_paper(
+                paper, provider, model, template_id, profile
+            )
+            new_cache_entries[
+                summary_cache.cache_key(paper["canonical_id"], template_id)
+            ] = {
                 "summary": summary, "model": model,
-                "provider": provider, "mode": mode, "generated": today_str,
+                "provider": provider, "template": template_id, "generated": today_str,
             }
         except subprocess.CalledProcessError as e:
             reason = (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
             log.error("Failed: %s — %s", paper["canonical_id"], reason)
             summary = f'_"(summary failed: {reason})"_'
+        except summarizer.PdfTextExtractionError as e:
+            log.error("Failed: %s — %s", paper["canonical_id"], e)
+            summary = f'_"(summary failed: {e})"_'
         except subprocess.TimeoutExpired:
             log.error("Timeout: %s", paper["canonical_id"])
             summary = '_"(summary failed: timeout)"_'
@@ -559,9 +684,166 @@ def _summarize_selected_related_work(
     return pairs
 
 
+def _run_zotero_collection_profile(profile: config.ProjectProfile, args: argparse.Namespace) -> int:
+    profile = _effective_profile(profile, args)
+    today_str = dt.date.today().isoformat()
+
+    try:
+        papers = zotero.collection_papers(
+            args.zotero_collection,
+            include_subcollections=args.zotero_include_subcollections,
+        )
+    except zotero.ZoteroError as e:
+        log.error(str(e))
+        return 2
+
+    for paper in papers:
+        paper["template"] = args.zotero_template
+
+    log.info(
+        "Zotero collection %r -> %d PDF-backed item(s)",
+        args.zotero_collection,
+        len(papers),
+    )
+    if not papers:
+        content = digest_writer.render_zotero_collection_digest(
+            today_str,
+            args.zotero_collection,
+            [],
+            profile,
+        )
+        path = digest_writer.save_digest(
+            today_str,
+            content,
+            str(Path(profile.digest_dir) / "zotero" / _slug(args.zotero_collection)),
+        )
+        log.info("Zotero batch digest -> %s", path)
+        return 0
+
+    provider, model, code = _resolve_llm(args)
+    if code:
+        return code
+
+    pairs = _summarize_zotero_papers(papers, args, profile, provider, model, today_str)
+    content = digest_writer.render_zotero_collection_digest(
+        today_str,
+        args.zotero_collection,
+        pairs,
+        profile,
+    )
+    path = digest_writer.save_digest(
+        today_str,
+        content,
+        str(Path(profile.digest_dir) / "zotero" / _slug(args.zotero_collection)),
+    )
+    log.info("Zotero batch digest -> %s", path)
+    return 0
+
+
+def _summarize_zotero_papers(
+    papers: list[dict],
+    args: argparse.Namespace,
+    profile: config.ProjectProfile,
+    provider: str,
+    model: str,
+    today_str: str,
+) -> list[tuple[dict, str]]:
+    cache_path = Path(profile.summary_cache_file)
+    cache = {} if args.refresh_summaries else summary_cache.load(cache_path)
+    new_cache_entries: dict[str, dict] = {}
+    pairs: list[tuple[dict, str]] = []
+
+    for i, paper in enumerate(papers, 1):
+        template_id = paper.get("template", args.zotero_template)
+        cached = (
+            None
+            if args.refresh_summaries
+            else summary_cache.lookup(cache, paper, template_id)
+        )
+        if cached is not None:
+            log.info("Cached [%d/%d] (%s) %s", i, len(papers), template_id, paper["title"][:60])
+            pairs.append((paper, cached))
+            continue
+
+        pdf_path = Path(paper["pdf_path"])
+        log.info("Summarizing PDF [%d/%d] (%s) %s", i, len(papers), template_id, paper["title"][:60])
+        try:
+            summary = summarizer.summarize_paper(
+                paper,
+                provider,
+                model,
+                template_id,
+                profile,
+                pdf_path=pdf_path,
+            )
+            new_cache_entries[
+                summary_cache.cache_key(paper["canonical_id"], template_id)
+            ] = {
+                "summary": summary,
+                "model": model,
+                "provider": provider,
+                "template": template_id,
+                "pdf_path": str(pdf_path),
+                "generated": today_str,
+            }
+        except subprocess.CalledProcessError as e:
+            reason = (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
+            log.error("Failed: %s — %s", paper["canonical_id"], reason)
+            summary = f'_"(summary failed: {reason})"_'
+        except summarizer.PdfTextExtractionError as e:
+            log.error("Failed: %s — %s", paper["canonical_id"], e)
+            summary = f'_"(summary failed: {e})"_'
+        except subprocess.TimeoutExpired:
+            log.error("Timeout: %s", paper["canonical_id"])
+            summary = '_"(summary failed: timeout)"_'
+        pairs.append((paper, summary))
+        if i < len(papers):
+            time.sleep(1)
+
+    if new_cache_entries:
+        summary_cache.save(cache_path, new_cache_entries)
+    return pairs
+
+
+def _list_zotero_collections() -> int:
+    collections = zotero.list_collections()
+    if not collections:
+        print("(no Zotero collections found)")
+        return 0
+    for collection in collections:
+        print(collection["path"])
+    return 0
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "collection"
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     _setup_logging(args.verbose)
+
+    if args.list_zotero_collections:
+        return _list_zotero_collections()
+
+    if args.zotero_collection and args.related_work:
+        log.error("--zotero-collection cannot be combined with --related-work")
+        return 2
+
+    templates_required = bool(
+        args.zotero_collection
+        or args.select
+        or (not args.no_summarize and not args.related_work)
+    )
+    if templates_required:
+        try:
+            config.summary_template_catalog()
+            if args.zotero_collection:
+                config.summary_template(args.zotero_template)
+        except config.ConfigError as exc:
+            log.error(str(exc))
+            return 2
 
     profiles, code = _resolve_profiles(args)
     if code or profiles is None:
@@ -582,6 +864,13 @@ def main(argv: list[str] | None = None) -> int:
             log.info("--related-work set; skipping LLM step unless --select is used")
         for profile in profiles:
             code = _run_related_work_profile(profile, args)
+            if code:
+                return code
+        return 0
+
+    if args.zotero_collection:
+        for profile in profiles:
+            code = _run_zotero_collection_profile(profile, args)
             if code:
                 return code
         return 0

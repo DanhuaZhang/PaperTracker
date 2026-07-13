@@ -13,7 +13,7 @@ import feedparser
 import requests
 
 from .. import config
-from . import openalex_client
+from . import doi_enrichment
 from ._filter import tag_venue
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,9 @@ def fetch(
                 total_dropped_out_of_window += 1
                 continue
             if not paper["abstract"] and paper["doi"]:
-                paper["abstract"] = openalex_client.fetch_abstract(paper["doi"]) or ""
+                recovered = doi_enrichment.recover_abstract(paper["doi"])
+                if recovered:
+                    doi_enrichment.merge_metadata(paper, recovered)
             if not paper["abstract"]:
                 total_dropped_no_abstract += 1
                 continue

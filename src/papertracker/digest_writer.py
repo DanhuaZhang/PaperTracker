@@ -13,6 +13,7 @@ _SOURCE_BADGE = {
     "acm": "[ACM]",
     "journal_rss": "[RSS]",
     "openalex": "[OpenAlex]",
+    "zotero": "[Zotero]",
 }
 
 
@@ -70,6 +71,27 @@ def render_empty_digest(date_str: str, profile: config.ProjectProfile | None = N
         "> No new papers matched the filter criteria today.\n"
         "\n"
     )
+
+
+def render_zotero_collection_digest(
+    date_str: str,
+    collection_path: str,
+    papers_with_summaries: list[tuple[dict, str]],
+    profile: config.ProjectProfile,
+) -> str:
+    lines = [
+        f"# PaperTracker Zotero Batch - {profile.name} - {collection_path} - {date_str}",
+        "",
+        f"> Auto-generated from {len(papers_with_summaries)} local Zotero PDF(s).",
+        "",
+    ]
+    if not papers_with_summaries:
+        lines.extend(["No PDFs were found in this Zotero collection.", ""])
+        return "\n".join(lines).rstrip() + "\n"
+
+    for paper, summary in papers_with_summaries:
+        lines.extend(_render_paper(paper, summary))
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_related_work_digest(
@@ -286,10 +308,12 @@ def _render_paper(paper: dict, summary: str) -> list[str]:
     lines.extend([
         f"**Published:** {paper.get('published') or 'n/a'}  ",
         f"**Link:** [{link_text}]({link_url})",
-        "",
-        summary,
-        "",
-        "---",
-        "",
     ])
+    if paper.get("oa_url"):
+        lines.append(f"**Open access:** [PDF/repository]({paper['oa_url']})  ")
+    if "cited_by_count" in paper:
+        lines.append(f"**Citations:** {int(paper.get('cited_by_count') or 0)}  ")
+    if paper.get("metadata_sources"):
+        lines.append(f"**Metadata:** {', '.join(paper['metadata_sources'])}  ")
+    lines.extend(["", summary, "", "---", ""])
     return lines

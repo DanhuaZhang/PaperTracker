@@ -132,12 +132,18 @@ def rank_facet_candidates(
     from . import relevance
 
     paper_texts = [f"{p.get('title', '')}. {p.get('abstract', '')}".strip() for p in papers]
-    project_scores = relevance.score_batch(paper_texts, topic_statement=profile.topic_statement)
+    score_kwargs = {
+        "mode": getattr(profile, "relevance_scorer", "dense"),
+        "enable_reranker": bool(getattr(profile, "enable_reranker", False)),
+        "reranker_model": getattr(profile, "reranker_model", None),
+        "reranker_top_k": int(getattr(profile, "reranker_top_k", 100)),
+    }
+    project_scores = relevance.score_texts(profile.topic_statement, paper_texts, **score_kwargs)
     max_citations = max(1, max(int(p.get("cited_by_count") or 0) for p in papers))
-    facet_scores_by_id: dict[str, list[float]] = {}
+    facet_scores_by_id: dict[str, list[relevance.RelevanceScore]] = {}
     for facet in facets:
         facet_topic = f"{facet.name}. {facet.description}. {facet.query_hint}"
-        facet_scores_by_id[facet.id] = relevance.score_batch(paper_texts, topic_statement=facet_topic)
+        facet_scores_by_id[facet.id] = relevance.score_texts(facet_topic, paper_texts, **score_kwargs)
 
     ranked_by_facet: dict[str, list[dict]] = {facet.id: [] for facet in facets}
     facet_lookup = {facet.id: facet for facet in facets}
@@ -149,14 +155,20 @@ def rank_facet_candidates(
             facet.id for facet in facets
         ]
         paper["facet_hits"] = facet_hits
-        paper["project_relevance_score"] = project_scores[idx]
+        relevance.annotate_score_fields(
+            paper,
+            project_scores[idx],
+            prefix="project_",
+            relevance_key="project_relevance_score",
+        )
         paper["facet_scores"] = {
-            facet.id: facet_scores_by_id[facet.id][idx] for facet in facets
+            facet.id: facet_scores_by_id[facet.id][idx].final_score for facet in facets
         }
 
         for facet_id in matched_facet_ids:
-            facet_rel = paper["facet_scores"][facet_id]
-            project_rel = project_scores[idx]
+            facet_score = facet_scores_by_id[facet_id][idx]
+            facet_rel = facet_score.final_score
+            project_rel = project_scores[idx].final_score
             discovery_sources = set(facet_hits.get(facet_id) or paper.get("discovery_sources") or [])
             source_bonus = min(max(len(discovery_sources) - 1, 0), 2) * 0.035
             multifacet_bonus = min(max(len(facet_hits) - 1, 0), 3) * 0.025
@@ -173,7 +185,12 @@ def rank_facet_candidates(
                 continue
             candidate = paper.copy()
             candidate["primary_facet"] = facet_id
-            candidate["facet_relevance_score"] = facet_rel
+            relevance.annotate_score_fields(
+                candidate,
+                facet_score,
+                prefix="facet_",
+                relevance_key="facet_relevance_score",
+            )
             candidate["related_work_score"] = score
             ranked_by_facet[facet_id].append(candidate)
 

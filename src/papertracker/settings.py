@@ -1,10 +1,8 @@
 """Provider/model resolution with explicit precedence.
 
-Order (first non-empty wins):
-  1. CLI flag
-  2. PAPERTRACKER_* env var
-  3. ~/.config/papertracker/config.toml
-  4. ./papertracker.toml project default
+Provider order: CLI flag, environment variable, personal config, project config.
+Model order: CLI flag, environment variable, then the selected provider's
+`claude_model` or `codex_model` key from personal config or project config.
 """
 from __future__ import annotations
 
@@ -80,13 +78,15 @@ def resolve_model(cli_arg: str | None, provider: str) -> tuple[str, str]:
     if env:
         return env, "env var PAPERTRACKER_MODEL"
 
+    model_key = f"{provider}_model"
+
     toml_cfg = _load_toml_config(CONFIG_PATH)
-    if "model" in toml_cfg:
-        return toml_cfg["model"], f"config file {CONFIG_PATH}"
+    if model_key in toml_cfg:
+        return toml_cfg[model_key], f"config file {CONFIG_PATH}"
 
     project_cfg = _load_toml_config(PROJECT_CONFIG_PATH)
-    if "model" in project_cfg:
-        return project_cfg["model"], f"project config file {PROJECT_CONFIG_PATH}"
+    if model_key in project_cfg:
+        return project_cfg[model_key], f"project config file {PROJECT_CONFIG_PATH}"
 
     default = config.CLAUDE_MODEL if provider == "claude" else config.CODEX_MODEL
     return default, f"provider fallback in {PROJECT_CONFIG_PATH}"

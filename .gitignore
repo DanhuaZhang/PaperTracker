@@ -17,6 +17,9 @@ digests/*.md
 digests/**/*.md
 !digests/.gitkeep
 
+# Personal project profiles (copy projects.example.toml -> projects.toml)
+projects.toml
+
 # Env / IDE
 .env
 .DS_Store

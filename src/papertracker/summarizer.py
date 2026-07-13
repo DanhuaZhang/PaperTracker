@@ -6,42 +6,16 @@ No API key environment variable required.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import shutil
 import subprocess
 
-from . import config, zotero
+from . import config, summary_templates
 
 log = logging.getLogger(__name__)
 
-_TRIAGE_TEMPLATE = """\
-You are a research assistant for embodied-AI / XR / spatial-computing researchers.
-Summarize the following paper as markdown bullets covering, in order:
-1. Core objective / what it does
-2. Key technical contribution
-3. Main results, benchmarks, or datasets
-4. **Model & data:** Did the authors train a new model? If so, name its architecture/structure and the training dataset(s). Also state whether they introduce a new dataset or benchmark.
-5. **Open source:** Are the code and/or dataset publicly released? Include the repo/link if the abstract gives one.
-6. **Future work & directions:** Any future work the authors mention, plus 1–2 promising follow-up research directions this paper opens up.
-7. (Optional) Limitations noted by the authors
-8. (Optional) Relevance to embodied / XR / AR / VR research
-
-Rules:
-- Active voice; cite numbers and dataset names when the abstract provides them.
-- For items 4 and 5, if the abstract doesn't say, write "Not stated in the abstract" — do not guess.
-- For item 6 you may suggest directions beyond the abstract, but keep them concrete and grounded in the paper's topic; clearly mark them as suggestions (e.g. "Possible next step: …").
-- Do not restate the paper title.
-- Do not speculate beyond the abstract (except for the suggested directions in item 6).
-- Under 400 words total.
-- Output the bullets only — no preamble, no closing remark.
-
-Title: {title}
-
-Abstract: {abstract}
-"""
-
-_DEEP_HEADER = """\
-You are a research assistant for an embodied-AI / XR researcher.
-Fill in the following Obsidian note template for the paper, in markdown.
+_TEMPLATE_HEADER = """\
+You are a research assistant. Fill in the following summary template for the paper, in markdown.
 
 Rules:
 - Reproduce the template's frontmatter and headings EXACTLY.
@@ -57,7 +31,20 @@ Template to fill:
 _PDF_INSTRUCTION = (
     "Read the full paper PDF at this path and base your answer on it:\n{pdf_path}\n\n"
 )
+_PDF_TEXT_INSTRUCTION = """\
+Base your answer on the following text extracted from the local full paper PDF.
+Extraction can lose some figure/table layout; do not invent details that are not present.
+
+Extracted PDF text:
+{pdf_text}
+
+"""
 _ABSTRACT_INSTRUCTION = "Base your answer on this title and abstract only.\n\n"
+_PDF_TEXT_CHAR_LIMIT = 80_000
+
+
+class PdfTextExtractionError(RuntimeError):
+    """Raised when a local PDF cannot be converted into text for a provider."""
 
 
 def _project_context(profile: config.ProjectProfile | None) -> str:
@@ -90,46 +77,93 @@ def preflight(provider: str) -> None:
 
 def build_prompt(
     paper: dict,
-    mode: str,
+    template_id: str,
     pdf_path,
     profile: config.ProjectProfile | None = None,
+    pdf_text: str | None = None,
 ) -> tuple[str, bool]:
     """Return (prompt, uses_pdf). uses_pdf drives whether the Read tool is enabled."""
-    uses_pdf = pdf_path is not None
-    source = (
-        _PDF_INSTRUCTION.format(pdf_path=pdf_path) if uses_pdf else _ABSTRACT_INSTRUCTION
-    )
+    uses_pdf = pdf_path is not None or pdf_text is not None
+    if pdf_text is not None:
+        source = _PDF_TEXT_INSTRUCTION.format(pdf_text=pdf_text)
+    elif pdf_path is not None:
+        source = _PDF_INSTRUCTION.format(pdf_path=pdf_path)
+    else:
+        source = _ABSTRACT_INSTRUCTION
     context = _project_context(profile)
-    if mode == "deep":
-        body = _DEEP_HEADER.format(template=config.obsidian_template())
-        meta = f"Title: {paper['title']}\n\nAbstract: {paper.get('abstract', '')}\n"
-        return source + context + body + "\n" + meta, uses_pdf
-    # triage template already embeds title/abstract; only prepend the source note
-    body = _TRIAGE_TEMPLATE.format(title=paper["title"], abstract=paper.get("abstract", ""))
-    return source + context + body, uses_pdf
+    template = config.summary_template(template_id)
+    body = _TEMPLATE_HEADER.format(template=summary_templates.load(template))
+    meta = f"Title: {paper['title']}\n\nAbstract: {paper.get('abstract', '')}\n"
+    return source + context + body + "\n" + meta, uses_pdf
 
 
 def summarize_paper(
     paper: dict,
     provider: str,
     model: str,
-    mode: str = "triage",
+    template_id: str | None = None,
     profile: config.ProjectProfile | None = None,
+    pdf_path=None,
 ) -> str:
-    pdf_path = None
-    if provider == "claude":  # full-text-via-Read implemented for claude only
-        pdf_path = zotero.find_pdf(paper)
-        if pdf_path is None:
-            log.info("No Zotero PDF for %s — summarizing from abstract", paper.get("canonical_id"))
-    prompt, uses_pdf = build_prompt(paper, mode, pdf_path, profile)
+    if template_id is None:
+        _templates, default_template = config.summary_template_catalog()
+        template_id = default_template.id
+    pdf_text = None
+    llm_pdf_path = pdf_path
+    if provider == "codex" and pdf_path is not None:
+        pdf_text = extract_pdf_text(Path(pdf_path))
+        llm_pdf_path = None
+
+    prompt, uses_pdf = build_prompt(
+        paper, template_id, llm_pdf_path, profile, pdf_text=pdf_text
+    )
     if provider == "claude":
-        out = _summarize_claude(prompt, model, pdf_path if uses_pdf else None)
-        if pdf_path is None:
-            return "> _Abstract-based (no Zotero PDF found)._\n\n" + out
+        out = _summarize_claude(prompt, model, llm_pdf_path if uses_pdf else None)
+        if llm_pdf_path is None:
+            return "> _Abstract-based._\n\n" + out
         return out
     if provider == "codex":
         return _summarize_codex(prompt, model)
     raise ValueError(f"Unknown provider: {provider}")
+
+
+def extract_pdf_text(pdf_path: Path, char_limit: int = _PDF_TEXT_CHAR_LIMIT) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise PdfTextExtractionError(
+            "pypdf is required to summarize Zotero PDFs with the codex provider"
+        ) from exc
+
+    try:
+        reader = PdfReader(str(pdf_path))
+        chunks: list[str] = []
+        total = 0
+        truncated = False
+        for page_number, page in enumerate(reader.pages, 1):
+            page_text = (page.extract_text() or "").strip()
+            if not page_text:
+                continue
+            chunk = f"[Page {page_number}]\n{page_text}"
+            remaining = char_limit - total
+            if len(chunk) > remaining:
+                chunks.append(chunk[:remaining])
+                truncated = True
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total >= char_limit:
+                truncated = True
+                break
+    except Exception as exc:
+        raise PdfTextExtractionError(f"could not extract text from {pdf_path}: {exc}") from exc
+
+    text = "\n\n".join(chunks).strip()
+    if not text:
+        raise PdfTextExtractionError(f"could not extract text from {pdf_path}: no text found")
+    if truncated:
+        text += f"\n\n[PDF text truncated at {char_limit} characters.]"
+    return text
 
 
 def run_json_prompt(provider: str, model: str, prompt: str) -> str:
@@ -158,10 +192,14 @@ def _summarize_claude(prompt: str, model: str, pdf_path=None) -> str:
     return result.stdout.strip()
 
 
-def _summarize_codex(prompt: str, model: str) -> str:
+def _summarize_codex(prompt: str, model: str, pdf_path=None) -> str:
     cmd = [
         "codex", "exec",
         "--sandbox", "read-only",
+    ]
+    if pdf_path is not None:
+        cmd += ["--add-dir", str(Path(pdf_path).parent)]
+    cmd += [
         "--skip-git-repo-check",
         "--model", model,
         "-",

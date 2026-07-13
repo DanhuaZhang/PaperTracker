@@ -2,8 +2,9 @@
 
 Daily markdown digest of the latest **multi-modal embodied-agent papers in 3D / XR / AR / VR**.
 
-- **Sources**: arXiv (preprints), CrossRef (ACM + IEEE published papers), and journal RSS (TVCG, TOG, TOCHI).
-- **No paper-source API keys** — relies on free, no-auth public APIs. Your university VPN is only needed when you *click* the DOI link in the digest to read the full paper.
+- **Discovery sources**: arXiv (preprints), Crossref (ACM + IEEE published papers), and journal RSS (TVCG, TOG, TOCHI).
+- **DOI fallback and enrichment**: OpenAlex, Semantic Scholar, OpenAIRE, CORE, Europe PMC, DataCite, Unpaywall, OpenCitations, and DBLP.
+- **No required paper-source API keys** — the defaults use free public APIs. Optional free credentials improve limits and reliability. Your university VPN is only needed when you *click* a publisher link to read restricted full text.
 - **No paid AI API key** — summarization shells out to your locally-installed `claude` (default) or `codex` CLI, consuming your Claude Pro/Max or ChatGPT Plus/Pro subscription quota.
 - Output: one digest per project run, grouped by priority venue.
 
@@ -17,7 +18,8 @@ brew install uv                 # or: curl -LsSf https://astral.sh/uv/install.sh
 
 # Project setup
 cd PaperTracker
-uv sync                         # installs deps into .venv
+uv sync                         # installs deps into .venv; also provisions the
+                                # Python version pinned in .python-version (3.12)
 
 # One-time AI CLI auth (pick at least one)
 claude login                    # Claude Pro/Max subscription
@@ -52,18 +54,44 @@ Already-summarized DOIs/arXiv IDs are remembered per project in
 another. Without `projects.toml`, PaperTracker falls back to the legacy
 `digests/YYYY-MM-DD.md` and `.seen_papers.json` paths.
 
-## Two summary modes (`--select`)
+## Markdown summary templates (`--select`)
 
-With `--select`, the browser selector lets you choose a **mode per paper**:
+Summary formats are Markdown output skeletons discovered from the configured
+template folder:
 
-- **Triage** — the standard relevance bullets (objective, contribution, results, model & data, open source, future work). Use it to gauge how close a paper is to your own work.
-- **Deep (Obsidian)** — fills in *your* Obsidian paper-note template so you can drop it straight into your vault and complete the judgement sections (e.g. "My take") after reading.
+```text
+summary_templates/
+├── deep.md
+└── triage.md
+```
 
-In the headless text fallback, append `d` to a number for deep mode (e.g. `1,3d` = paper 1 triage, paper 3 deep).
+Each direct-child `*.md` filename becomes a dropdown option for every paper. For
+example, adding `summary_templates/experiment.md` automatically adds
+`experiment` to the list. With `--select`, each paper can use a different
+template, and the configured default is preselected.
 
-Both modes read the **full PDF from your local Zotero library** when the paper is found there (matched by DOI, then title); otherwise they fall back to the abstract and the summary is tagged *"Abstract-based (no Zotero PDF found)."* So **file a paper in Zotero before summarizing** to get full-text output. Summaries are cached per `(paper, mode)` in the active project's summary cache.
+In the headless fallback, a bare paper number uses the default. Add
+`:template-id` to choose another template, for example `1,2:deep`. `a` selects
+all papers with the default template.
 
-> Full-text PDF reading currently requires the **`claude`** provider (the CLI reads the PDF directly). With `codex`, deep mode degrades to abstract-based.
+Discovery summaries are abstract-based by default. Use the explicit Zotero batch workflow below when you want full-text summaries from local PDFs. Template choice does not control the source. Summaries are cached per `(paper, template)` in the active project's summary cache.
+
+## Zotero PDF batch mode
+
+Use `--zotero-collection` to summarize PDFs attached to a Zotero collection. The collection path is the path shown in Zotero's collection tree, relative to the library root, not the random `~/Zotero/storage/...` PDF folder name.
+
+```bash
+uv run papertracker --list-zotero-collections
+uv run papertracker --provider claude --zotero-collection "Reading/Deep Reading"
+uv run papertracker --provider claude --zotero-collection "Reading/Deep Reading" --zotero-template deep
+uv run papertracker --provider claude --zotero-collection "Reading/Deep Reading" --zotero-include-subcollections
+```
+
+If more than one collection has the same leaf name, use the full path, for example `Project A/Deep Reading` rather than just `Deep Reading`. You can also include the optional `My Library/` prefix; PaperTracker treats `My Library/Reading/Deep Reading` as `Reading/Deep Reading`.
+
+Zotero batch summaries use the selected provider. Claude reads the local PDF
+directly; Codex first extracts local PDF text with `pypdf` and sends that text to
+the model. Digests are written under `digests/<project-id>/zotero/<collection>/`.
 
 ## Related-work mode
 
@@ -79,7 +107,8 @@ uv run papertracker --project xr-agents --related-work --facets --select
 ```
 
 Related-work mode uses OpenAlex semantic search plus citation-count sorted search
-across all years, then reranks results with the local embedding relevance score.
+across all years, then reranks results with the active local relevance scorer
+plus citation and discovery-source signals.
 It does **not** use `--days`, does **not** update the project's `seen.json`, and
 writes to `digests/<project-id>/related-work/YYYY-MM-DD.md`.
 
@@ -101,10 +130,15 @@ export PAPERTRACKER_OPENALEX_API_KEY="your_key_here"
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `PAPERTRACKER_OBSIDIAN_TEMPLATE` | Path to your Obsidian paper-note template `.md`; injected into deep-mode prompts | built-in default template |
 | `PAPERTRACKER_ZOTERO_DIR` | Zotero data directory (contains `zotero.sqlite` + `storage/`) | `~/Zotero` |
 | `PAPERTRACKER_ZOTERO_LINKED_BASE` | Base dir for Zotero "Linked Attachment Base Directory" (ZotFile-style linked PDFs) | unset |
 | `PAPERTRACKER_OPENALEX_API_KEY` | Optional free OpenAlex key for higher related-work / abstract-lookup limits | unset |
+| `PAPERTRACKER_SEMANTIC_SCHOLAR_API_KEY` | Optional free Semantic Scholar key for a dedicated rate limit | unset |
+| `PAPERTRACKER_CORE_API_KEY` | Optional CORE key for better API performance | unset |
+| `PAPERTRACKER_OPENCITATIONS_ACCESS_TOKEN` | Optional OpenCitations token for identified API use | unset |
+| `PAPERTRACKER_ABSTRACT_FALLBACKS` | Ordered comma-separated DOI abstract providers | `openalex,semantic_scholar,openaire,core,europe_pmc,datacite` |
+| `PAPERTRACKER_DOI_ENRICHERS` | Comma-separated providers applied to relevant, unseen DOI papers | `unpaywall,opencitations,dblp,datacite` |
+| `FASTEMBED_CACHE_PATH` | Override where the local embedding model is cached | `.papertracker/fastembed_cache` |
 
 The Zotero DB is opened **read-only** (copied to a temp file first), so PaperTracker never modifies your library.
 
@@ -112,17 +146,37 @@ The Zotero DB is opened **read-only** (copied to a temp file first), so PaperTra
 
 Runtime defaults live in `papertracker.toml` in this repo. That file contains
 the default provider/model plus source defaults, output base paths, Zotero, and
-Obsidian template settings.
+summary-template settings.
+
+The TOML file stores only the template folder and default template ID; template
+contents remain in Markdown files:
+
+```toml
+summary_template_dir = "summary_templates"
+default_summary_template = "triage"
+```
+
+Relative template directories are resolved from the directory containing
+`papertracker.toml`. Template IDs are case-sensitive filename stems, and files
+are shown alphabetically in the selector.
 
 For example, to switch the default summarizer to Codex, edit:
 
 ```toml
 provider = "codex"
-model = "gpt-5.4"
+codex_model = "gpt-5.4"
 ```
 
-Project/topic profiles live in `projects.toml`. Each profile has its own topic
-statement and CrossRef keyword hint:
+Project/topic profiles live in `projects.toml`. This file is **gitignored** (it
+holds your personal topics) — start from the tracked template:
+
+```bash
+cp projects.example.toml projects.toml   # then edit for your own topics
+```
+
+If no `projects.toml` exists, PaperTracker runs a single legacy profile built
+entirely from `papertracker.toml`. Each profile has its own topic statement and
+CrossRef keyword hint:
 
 ```toml
 default_project = "xr-agents"
@@ -135,8 +189,13 @@ Embodied agents, XR, AR/VR, spatial reasoning, and 3D scene understanding.
 """
 crossref_query_hint = "embodied agent XR AR VR spatial reasoning 3D scene"
 arxiv_categories = ["cs.CV", "cs.RO", "cs.HC"]
+relevance_scorer = "dense"
 relevance_threshold = 0.65
+hybrid_relevance_threshold = 0.60
 ```
+
+See [`projects.example.toml`](projects.example.toml) for a fully commented
+template.
 
 ### Default AI tool — precedence
 
@@ -149,13 +208,16 @@ Pick **one** of these to set your default provider; CLI flag wins, then env var,
 | Personal config file | `~/.config/papertracker/config.toml` → `provider = "codex"` | global user override |
 | Repo config file | `papertracker.toml` → `provider = "codex"` | project default |
 
-Same chain applies to `--model` / `PAPERTRACKER_MODEL` / `model = "..."`.
+`--model` and `PAPERTRACKER_MODEL` override the selected provider's configured
+default for one run or shell. In config files, set provider-specific defaults
+with `claude_model = "..."` and `codex_model = "..."`.
 
 Example TOML config:
 ```toml
 # ~/.config/papertracker/config.toml
 provider = "codex"
-model = "gpt-5.3-codex"
+claude_model = "sonnet"
+codex_model = "gpt-5.3-codex"
 ```
 
 ## How paper sources work without API keys
@@ -165,27 +227,56 @@ The script **never logs into IEEE Xplore or ACM Digital Library**. Both publishe
 | Step | Endpoint | Auth | Returns |
 |---|---|---|---|
 | Find new ACM/IEEE papers | `api.crossref.org/works` | none | DOI, title, abstract, authors |
-| Backup if abstract missing | `api.openalex.org/works/{doi}` | none | reconstructed abstract |
+| Recover a missing abstract | OpenAlex, Semantic Scholar, OpenAIRE, CORE, Europe PMC, then DataCite | optional free keys | first available abstract plus provenance |
+| Enrich a relevant unseen DOI | Unpaywall, OpenCitations, DBLP, DataCite | optional free tokens | OA location, citations/references, and bibliographic metadata |
 | Summarize | `claude` / `codex` CLI | subscription login | bullet summary |
 | Read full PDF (later, by you) | DOI link → IEEE/ACM site | university VPN | the paper |
 
 **Timing**: arXiv preprints appear same-day (often weeks before conference). CrossRef ACM/IEEE deposits appear within ~1–14 days of publication (so e.g. CHI papers appear in the digest within ~1 week of the conference). Journal RSS feeds (TVCG, TOG, TOCHI) sometimes appear 1–2 days earlier than the CrossRef deposit; DOI-based dedup merges them.
 
-If neither CrossRef nor OpenAlex has an abstract for a given paper, it is **skipped silently** (no AI summary attempted on title alone).
+If Crossref and every configured abstract fallback lack an abstract for a paper,
+it is **skipped silently** (no AI summary is attempted on title alone). DOI
+lookups are cached by normalized DOI for the duration of the run, and one
+provider's failure does not stop later fallbacks.
 
-## Relevance filter (embedding-based)
+## Relevance filter
 
-Each fetched paper's (title + abstract) is embedded locally with `BAAI/bge-small-en-v1.5` (~130 MB ONNX, downloaded once via `fastembed` on first run) and compared via cosine similarity to the active project's `topic_statement`. Papers at/above that project's `relevance_threshold` pass to the summarizer.
+PaperTracker has two local, non-LLM relevance scorers:
+
+- `dense` (default): the original computation. Each fetched paper's
+  `(title + abstract)` is embedded locally with `BAAI/bge-small-en-v1.5` and
+  compared via cosine similarity to the active project's `topic_statement`.
+  Papers at/above `relevance_threshold` pass to the summarizer.
+- `hybrid`: combines the same dense embedding signal with an in-process BM25
+  keyword score. It uses `hybrid_relevance_threshold` and can optionally add a
+  local cross-encoder reranker.
 
 The model runs on CPU/ANE and processes ~100 abstracts in under 2 seconds on Apple Silicon.
 
 To tune:
 - **Edit `topic_statement`** in `projects.toml` to reflect the project. The more specific (and longer), the better the discrimination.
-- **Edit `relevance_threshold`** (or pass `--threshold 0.7` per run). Higher = stricter. Use `--no-summarize -v` to see scores and pick a cut point.
+- **Edit `relevance_scorer`** (`dense` or `hybrid`) or pass `--scorer hybrid` per run.
+- **Edit the active threshold** (`relevance_threshold` for `dense`,
+  `hybrid_relevance_threshold` for `hybrid`) or pass `--threshold 0.7` per run.
+  Higher = stricter. Use `--no-summarize -v` to see scores and pick a cut point.
 
 To inspect scores without spending LLM quota:
 ```bash
 uv run papertracker --no-summarize --threshold -1 --days 14   # see all scores
+uv run papertracker --no-summarize --scorer hybrid --threshold -1 --days 14
+```
+
+Optional local reranking for hybrid mode requires the extra dependency:
+
+```bash
+uv sync --extra rerank
+```
+
+Then set:
+
+```toml
+relevance_scorer = "hybrid"
+enable_reranker = true
 ```
 
 ## Customizing venues and categories
@@ -209,6 +300,31 @@ digests/
     └── summary_cache.json
 ```
 
+## Migrating to a new machine
+
+A `git clone` brings the code plus `papertracker.toml` and
+`projects.example.toml`. It does **not** bring anything machine-local, so on a
+fresh system you must recreate:
+
+1. **Runtime:** install `uv`, then `uv sync` (provisions Python 3.12 and deps).
+2. **Project profiles:** `cp projects.example.toml projects.toml` and edit it
+   for your topics (`projects.toml` is gitignored, so it never leaves your
+   machine). Skip this to run the legacy single-topic profile.
+3. **AI CLI auth:** `claude login` and/or `codex login` — subscription tokens are
+   stored by those CLIs (in their own config dirs), not by PaperTracker.
+4. **Environment variables** you had set in your shell rc (`~/.zshrc` etc.). None
+   are committed. The ones actually in use on the current machine are:
+   ```bash
+   export PAPERTRACKER_EMAIL=you@example.com          # CrossRef/OpenAlex polite pool
+   export PAPERTRACKER_OPENALEX_API_KEY="…"            # optional free OpenAlex key
+   ```
+   Any other `PAPERTRACKER_*` / `FASTEMBED_CACHE_PATH` overrides you rely on must
+   be re-exported too — see the env-var tables above.
+
+Regenerated automatically on first run (safe to omit): the `.papertracker/`
+state (`seen.json`, `summary_cache.json`, the downloaded embedding model),
+`digests/`, and `.venv/`. None of these are committed.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -218,6 +334,6 @@ digests/
 | Empty digest every day | Lower `--threshold` (e.g. 0.55) or widen the project's `topic_statement`; also try `--days 7`. |
 | Too much noise in digest | Raise `--threshold` (e.g. 0.7) or sharpen the project's `topic_statement`. |
 | Log says `capped at 500 of N total` | Bump `max_results_per_query` in `papertracker.toml`. Embedding is local so the only cost is HTTP roundtrips. |
-| First run is slow | First call downloads the ~130 MB embedding model into fastembed's cache. Cached thereafter. |
+| First run is slow | First call downloads the ~130 MB embedding model into `.papertracker/fastembed_cache/` (override with `FASTEMBED_CACHE_PATH`). Cached thereafter. |
 | Re-summarize a paper you already saw | `--ignore-seen` (or delete that project's `.papertracker/<project-id>/seen.json`). |
 | Want to inspect matches without spending quota | `--no-summarize` (sorts by relevance score). |

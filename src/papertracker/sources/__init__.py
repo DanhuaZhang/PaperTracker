@@ -1,1 +1,1 @@
-"""Paper sources: arXiv, CrossRef (ACM/IEEE), journal RSS, OpenAlex (abstract fallback)."""
+"""Paper discovery plus DOI fallback and enrichment providers."""

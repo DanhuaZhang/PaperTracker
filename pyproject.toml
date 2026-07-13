@@ -4,15 +4,19 @@ version = "0.1.0"
 description = "Daily digest of multi-modal embodied-agent papers in 3D/XR/AR/VR"
 readme = "README.md"
 authors = [
-    { name = "Danhua Zhang", email = "zhangdanhua3110@gmail.com" }
+    { name = "Your Name", email = "you@example.com" }
 ]
 requires-python = ">=3.11"
 dependencies = [
     "fastembed>=0.8.0",
     "feedparser>=6.0",
+    "pypdf>=5.0",
     "python-dateutil>=2.9",
     "requests>=2.32",
 ]
+
+[project.optional-dependencies]
+rerank = ["sentence-transformers>=5"]
 
 [project.scripts]
 papertracker = "papertracker.cli:main"
