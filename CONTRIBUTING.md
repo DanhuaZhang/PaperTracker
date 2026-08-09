@@ -20,10 +20,10 @@ time on a change.
 The repository runs from a source checkout; `uv tool install` is not supported.
 
 ```bash
-uv sync                          # provisions Python 3.12 and dependencies
-uv run pytest                    # full suite, offline, a few seconds
-uv run ruff check src tests      # lint
-uv build                         # the wheel/sdist build must succeed
+uv sync                             # provisions Python 3.12 and dependencies
+uv run pytest                       # full suite, offline, a few seconds
+uv run ruff check src tests scripts # lint
+uv build                            # the wheel/sdist build must succeed
 ```
 
 CI runs exactly these plus `uv sync --locked`, on Ubuntu, macOS, and Windows. A
@@ -48,6 +48,8 @@ alongside it or `uv sync --locked` fails in CI.
   `config.toml` just to configure your own machine.
 - `summary_templates/*.md` is the single copy of the summary formats. There is
   no packaged duplicate to keep in sync.
+- README's table of contents is generated. Add a heading, then run
+  `uv run python scripts/update_toc.py`; a test fails if it drifts.
 - Everything machine-local lives in `user_data/`, which is gitignored. Never
   commit digests, topics, or caches.
 
