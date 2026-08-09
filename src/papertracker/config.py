@@ -15,7 +15,26 @@ log = logging.getLogger(__name__)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-_REPOSITORY_CONFIG_PATH = REPOSITORY_ROOT / "papertracker.toml"
+_LEGACY_REPOSITORY_CONFIG_PATH = REPOSITORY_ROOT / "papertracker.toml"
+
+
+def _repository_config_path() -> Path:
+    """Prefer config.toml; tolerate the pre-rename papertracker.toml."""
+    preferred = REPOSITORY_ROOT / "config.toml"
+    if preferred.is_file():
+        return preferred
+    if _LEGACY_REPOSITORY_CONFIG_PATH.is_file():
+        log.warning(
+            "Reading runtime defaults from %s. Rename it to %s — papertracker.toml "
+            "is deprecated.",
+            _LEGACY_REPOSITORY_CONFIG_PATH,
+            preferred,
+        )
+        return _LEGACY_REPOSITORY_CONFIG_PATH
+    return preferred
+
+
+_REPOSITORY_CONFIG_PATH = _repository_config_path()
 _IN_SOURCE_CHECKOUT = (
     _REPOSITORY_CONFIG_PATH.is_file()
     and (REPOSITORY_ROOT / "pyproject.toml").is_file()
@@ -114,7 +133,6 @@ def _load_projects_config() -> dict:
 DEFAULT_PROVIDER = _cfg("provider")
 CLAUDE_MODEL = _cfg("claude_model")
 CODEX_MODEL = _cfg("codex_model")
-
 # CrossRef / OpenAlex polite-pool identifier. Set PAPERTRACKER_EMAIL in your shell
 # (or leave unset for anonymous requests — works, but with lower rate-limit priority).
 # Nothing is sent *from* this email; it's only included in outbound request metadata
@@ -236,7 +254,7 @@ def _projects_default(key: str, fallback):
 
     Lets personal settings (notably `priority_venues`) live once in
     user_data/projects.toml instead of being repeated per profile or kept in the
-    tracked papertracker.toml.
+    tracked config.toml.
     """
     global _PROJECTS_CONFIG
     if _PROJECTS_CONFIG is None:
@@ -322,7 +340,7 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
 
 
 def legacy_profile() -> ProjectProfile:
-    """Single-topic fallback profile using the root ``papertracker.toml`` settings."""
+    """Single-topic fallback profile using the root ``config.toml`` settings."""
     return ProjectProfile(
         id=None,
         name="PaperTracker",
@@ -407,9 +425,30 @@ def zotero_linked_base_dir() -> Path | None:
 
 # --- Markdown summary templates -------------------------------------------
 def summary_template_directory() -> Path:
-    """Return the active user-owned template directory."""
+    """Return the active user-owned template directory.
+
+    Relative paths resolve against the repository root in a source checkout, so
+    templates sit beside the code where they are easy to edit. An installed copy
+    has no repository root, so they resolve under the user data directory.
+    """
     directory = Path(SUMMARY_TEMPLATE_DIR).expanduser()
-    return directory if directory.is_absolute() else USER_DATA_DIR / directory
+    if directory.is_absolute():
+        return directory
+    base = REPOSITORY_ROOT if _IN_SOURCE_CHECKOUT else USER_DATA_DIR
+    return base / directory
+
+
+def _legacy_summary_template_directory() -> Path | None:
+    """Pre-move location, still holding templates a user may have customized."""
+    if not _IN_SOURCE_CHECKOUT:
+        return None
+    legacy = USER_DATA_DIR / Path(SUMMARY_TEMPLATE_DIR)
+    if legacy == summary_template_directory() or not legacy.is_dir():
+        return None
+    has_markdown = any(
+        path.is_file() and path.suffix == ".md" for path in legacy.iterdir()
+    )
+    return legacy if has_markdown else None
 
 
 def summary_template_catalog(default_evidence: str = "abstract"):
@@ -419,7 +458,18 @@ def summary_template_catalog(default_evidence: str = "abstract"):
     if default_evidence not in summary_templates.EVIDENCE_TYPES:
         raise ConfigError(f"Unknown template evidence type {default_evidence!r}")
     directory = summary_template_directory()
-    summary_templates.seed_if_empty(directory, BUNDLED_TEMPLATE_DIR)
+    # Templates used to live under user_data/. Carry a customized set forward
+    # rather than seeding pristine samples over the top of it.
+    legacy = _legacy_summary_template_directory()
+    source = legacy if legacy is not None else BUNDLED_TEMPLATE_DIR
+    if summary_templates.seed_if_empty(directory, source) and legacy is not None:
+        log.warning(
+            "Copied summary templates from the former location %s to %s. "
+            "Edit them there from now on; the old directory is no longer read "
+            "and can be deleted.",
+            legacy,
+            directory,
+        )
     templates, _ = summary_templates.discover(directory)
     by_id = {template.id: template for template in templates}
     defaults = {

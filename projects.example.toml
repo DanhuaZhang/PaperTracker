@@ -9,9 +9,9 @@
 # hides papers from another.
 #
 # Global runtime defaults (provider, sources, thresholds, output paths, Zotero,
-# summary templates) live in `papertracker.toml`. Any field a profile omits falls
+# summary templates) live in `config.toml`. Any field a profile omits falls
 # back to that file. Without a user_data/projects.toml, PaperTracker runs a single
-# placeholder profile built entirely from papertracker.toml.
+# placeholder profile built entirely from config.toml.
 
 # Which profile runs when you don't pass --project. Must match a profile `id`.
 default_project = "my-topic"
@@ -49,7 +49,7 @@ crossref_query_hint = "keywords describing your topic"
 arxiv_categories = ["cs.AI", "cs.LG"]
 
 # `relevance_threshold`: papers scoring at/above this (0..1) pass to the
-# summarizer. Higher = stricter. Omit to inherit papertracker.toml.
+# summarizer. Higher = stricter. Omit to inherit config.toml.
 # Tune it with: uv run papertracker --no-summarize --threshold -1 --days 14
 relevance_threshold = 0.65
 
@@ -80,15 +80,19 @@ query_hint = "benchmark dataset evaluation"
 # profile above inherits them; set `priority_venues` inside a [[projects]] block
 # to override for that one topic. `patterns` are case-insensitive substrings
 # matched against the CrossRef container title.
-[[priority_venues]]
-name = "NeurIPS"
-publisher = "acm"
-patterns = ["Neural Information Processing Systems", "NeurIPS"]
-
+# Match venues your publishers actually deposit: `publisher = "acm"` filters on
+# Crossref member 320 and `"ieee"` on member 263, so a venue deposited by neither
+# (NeurIPS, ICML, ICLR, and most other PMLR/OpenReview proceedings) will never
+# match here no matter what patterns you write.
 [[priority_venues]]
 name = "ACM CHI"
 publisher = "acm"
 patterns = ["CHI Conference on Human Factors", "CHI '"]
+
+[[priority_venues]]
+name = "ACM UIST"
+publisher = "acm"
+patterns = ["User Interface Software and Technology", "UIST '"]
 
 # Add `rss = "..."` to also poll a journal's RSS feed, which often lands 1–2 days
 # before the CrossRef deposit:

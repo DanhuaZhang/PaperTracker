@@ -159,7 +159,8 @@ def _fetch_all_items(
             time.sleep(_INTER_PAGE_DELAY_SEC)
     if total_results is not None and total_results > cap:
         log.warning(
-            "CrossRef[%s]: capped at %d of %d total — raise MAX_RESULTS_PER_QUERY to see more",
+            "CrossRef[%s]: capped at %d of %d total — raise max_results_per_query in "
+            "config.toml, or pass --max-results, to see more",
             source_label, cap, total_results,
         )
     return items

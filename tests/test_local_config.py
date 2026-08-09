@@ -154,6 +154,10 @@ default_fulltext_template = "Deep"
         assert loaded.USER_AGENT == "papertracker-test/1.0 (mailto:local@example.com)"
         assert str(loaded.zotero_data_dir()).endswith("TestZotero")
         assert str(loaded.zotero_linked_base_dir()).endswith("LinkedPapers")
+        # A relative summary_template_dir resolves against the repository root
+        # in a source checkout, so point that at the fixture too.
+        m.setattr(loaded, "REPOSITORY_ROOT", tmp_path)
+        m.setattr(loaded, "_IN_SOURCE_CHECKOUT", True)
         templates, default = loaded.summary_template_catalog()
         assert [template.id for template in templates] == ["Deep", "Screen"]
         assert default.id == "Screen"

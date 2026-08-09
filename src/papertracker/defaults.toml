@@ -7,7 +7,7 @@
 # Summarization provider. "claude" or "codex" — whichever CLI you logged into.
 provider = "claude"
 claude_model = "sonnet"
-codex_model = "gpt-5.5"
+codex_model = "gpt-5.6-luna"
 
 # Crossref / OpenAlex polite-pool identifier.
 # Leave empty for anonymous requests, or set PAPERTRACKER_EMAIL in your shell.

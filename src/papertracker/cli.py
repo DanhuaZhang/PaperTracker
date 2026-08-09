@@ -299,7 +299,7 @@ def _resolve_profiles(args: argparse.Namespace) -> tuple[list[config.ProjectProf
         if args.list_projects:
             profiles = config.project_profiles()
             if not profiles:
-                print("(no user_data/projects.toml configured; using the placeholder topic from papertracker.toml)")
+                print("(no user_data/projects.toml configured; using the placeholder topic from config.toml)")
             else:
                 default = config.default_project_id()
                 for profile in profiles:

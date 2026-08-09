@@ -82,12 +82,16 @@ def test_discover_reports_unreadable_utf8_with_path(tmp_path):
         summary_templates.discover(tmp_path)
 
 
-def test_config_uses_user_data_and_evidence_specific_defaults(monkeypatch, tmp_path):
+def test_config_uses_repository_root_and_evidence_specific_defaults(monkeypatch, tmp_path):
     active = tmp_path / "templates"
     active.mkdir()
     _write_template(active / "screen.md", evidence="abstract")
     _write_template(active / "deep.md", evidence="fulltext")
-    monkeypatch.setattr(config, "USER_DATA_DIR", tmp_path)
+    # In a source checkout a relative template dir resolves against the
+    # repository root, not user_data.
+    monkeypatch.setattr(config, "_IN_SOURCE_CHECKOUT", True)
+    monkeypatch.setattr(config, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setattr(config, "USER_DATA_DIR", tmp_path / "user_data")
     monkeypatch.setattr(config, "SUMMARY_TEMPLATE_DIR", "templates")
     monkeypatch.setattr(config, "DEFAULT_ABSTRACT_TEMPLATE", "screen")
     monkeypatch.setattr(config, "DEFAULT_FULLTEXT_TEMPLATE", "deep")
@@ -122,3 +126,55 @@ def test_every_bundled_sample_parses_with_required_headings():
     assert "## Ablations and failure cases" in by_id["deep-technical"].body
     assert "## Ethics, accessibility, and participant risk" in by_id["deep-human-study"].body
     assert "## Taxonomy and major themes" in by_id["deep-synthesis"].body
+
+
+def _point_config_at(monkeypatch, root: Path, user_data: Path) -> None:
+    monkeypatch.setattr(config, "_IN_SOURCE_CHECKOUT", True)
+    monkeypatch.setattr(config, "REPOSITORY_ROOT", root)
+    monkeypatch.setattr(config, "USER_DATA_DIR", user_data)
+    monkeypatch.setattr(config, "SUMMARY_TEMPLATE_DIR", "summary_templates")
+    monkeypatch.setattr(config, "DEFAULT_ABSTRACT_TEMPLATE", "screen")
+    monkeypatch.setattr(config, "DEFAULT_FULLTEXT_TEMPLATE", "deep")
+
+
+def test_templates_customized_in_the_old_user_data_location_are_carried_forward(
+    monkeypatch, tmp_path
+):
+    """Moving the directory to the repo root must not orphan a user's edits."""
+    root = tmp_path / "repo"
+    user_data = root / "user_data"
+    legacy = user_data / "summary_templates"
+    legacy.mkdir(parents=True)
+    _write_template(legacy / "screen.md", evidence="abstract", body="## Customized")
+    _write_template(legacy / "deep.md", evidence="fulltext")
+    _point_config_at(monkeypatch, root, user_data)
+
+    templates, default = config.summary_template_catalog("abstract")
+
+    assert [item.id for item in templates] == ["deep", "screen"]
+    assert default.path == root / "summary_templates" / "screen.md"
+    assert default.body == "## Customized"
+    # Copied, not moved — the old directory is left intact for the user to remove.
+    assert (legacy / "screen.md").is_file()
+
+
+def test_bundled_samples_seed_when_there_is_no_old_directory(monkeypatch, tmp_path):
+    root = tmp_path / "repo"
+    user_data = root / "user_data"
+    user_data.mkdir(parents=True)
+    monkeypatch.setattr(config, "DEFAULT_ABSTRACT_TEMPLATE", "abstract-screen")
+    monkeypatch.setattr(config, "DEFAULT_FULLTEXT_TEMPLATE", "deep-technical")
+    monkeypatch.setattr(config, "_IN_SOURCE_CHECKOUT", True)
+    monkeypatch.setattr(config, "REPOSITORY_ROOT", root)
+    monkeypatch.setattr(config, "USER_DATA_DIR", user_data)
+    monkeypatch.setattr(config, "SUMMARY_TEMPLATE_DIR", "summary_templates")
+
+    templates, _ = config.summary_template_catalog("abstract")
+
+    assert [item.id for item in templates] == [
+        "abstract-screen",
+        "deep-human-study",
+        "deep-synthesis",
+        "deep-technical",
+    ]
+    assert (root / "summary_templates" / "abstract-screen.md").is_file()

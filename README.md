@@ -73,7 +73,7 @@ Authentication options and plan availability can change; use the official
 [Claude Code setup guide](https://docs.anthropic.com/en/docs/claude-code/getting-started)
 or [Codex CLI and authentication guides](https://learn.chatgpt.com/docs/codex/cli).
 
-Do not edit the tracked `papertracker.toml` just to choose a provider. Set a
+Do not edit the tracked `config.toml` just to choose a provider. Set a
 personal default in your shell instead:
 
 ```bash
@@ -122,9 +122,15 @@ uv run papertracker --no-summarize --days 7
 This exercises the full pipeline — fetch, dedup, local relevance scoring — and
 prints matches with their scores to stdout without spending any quota.
 
-**The first run is slow.** `uv sync` installs the `fastembed` *library* but not
-the model weights; those download from HuggingFace on the first scoring call
-(~65 MB) into `user_data/cache/fastembed/`. So the first run needs network
+**Expect a few minutes, and expect that every time.** With the example config
+this took about 2.5 minutes end to end on an Apple Silicon Mac: roughly 45
+seconds fetching and two minutes scoring ~1400 abstracts locally. It is not
+hung. Scoring cost recurs on every run and scales with how many papers your
+`arxiv_categories` and date window pull in.
+
+**The first run is slower still.** `uv sync` installs the `fastembed` *library*
+but not the model weights; those download from HuggingFace on the first scoring
+call (~65 MB) into `user_data/cache/fastembed/`. So the first run needs network
 access, and every run after it works offline for scoring.
 
 If you see papers you care about, you're set:
@@ -163,7 +169,7 @@ uv run papertracker --sources arxiv        # one source at a time
 uv run papertracker --no-summarize         # list matches, no LLM calls
 uv run papertracker --priority-venues-only # only papers in your priority venues
 uv run papertracker --ignore-seen --days 14   # re-summarize already-seen papers
-uv run papertracker --select               # choose papers and templates interactively
+uv run papertracker --select               # choose papers and templates in a browser tab
 uv run papertracker --related-work         # all-time important work for the topic
 uv run papertracker --related-work --facets # grouped related-work matrix
 uv run papertracker -v                     # debug logging
@@ -210,10 +216,10 @@ read it before installing.
 
 | Flag | Default | Effect |
 |---|---|---|
-| `--provider claude\|codex` | `provider` in `papertracker.toml` | Which CLI to shell out to |
+| `--provider claude\|codex` | `provider` in `config.toml` | Which CLI to shell out to |
 | `--model NAME` | `claude_model` / `codex_model` | Model for the selected provider |
 | `--no-summarize` | off | Skip the LLM. Daily mode prints matches; faceted related-work needs configured facets and writes conservative local annotations |
-| `--select` | off | Pick papers interactively (and templates in summary workflows). In daily mode, overrides `--no-summarize` |
+| `--select` | off | Pick papers (and templates in summary workflows) in a **browser tab**; falls back to a numbered text prompt when headless. In daily mode, overrides `--no-summarize` |
 | `--template ID` | workflow default | Apply one template globally; `--select` can still override it per paper |
 | `--list-templates` | — | Print every template's ID, label, evidence requirement, description, and default status |
 | `--refresh-summaries` | off | Ignore the summary cache and regenerate, overwriting cached entries |
@@ -241,9 +247,9 @@ reused* for papers that are processed.
 ## Where your data lives
 
 ```
+summary_templates/*.md                # your editable summary formats (gitignored)
 user_data/                            # gitignored in full
 ├── projects.toml                     # your topics
-├── summary_templates/*.md            # your editable summary formats
 ├── digests/<project-id>/YYYY-MM-DD.md
 ├── state/<project-id>/seen.json      # papers already summarized
 ├── state/<project-id>/summary_cache.json
@@ -258,9 +264,13 @@ into that day's digest. An empty later run leaves the existing digest untouched.
 Only successfully summarized papers enter `seen.json`; failures exit nonzero and
 remain eligible for the next run.
 
-Moving to a new machine is: clone, follow Setup, copy `user_data/` across. To
-keep the folder outside the checkout entirely, set
-`PAPERTRACKER_USER_DATA_DIR=/path/to/dir`.
+**Moving to a new machine** is: clone, follow Setup, then copy across **both**
+`user_data/` *and* `summary_templates/`. Templates sit at the repository root so
+they are easy to edit, which means `user_data/` on its own is no longer a
+complete backup — copying only that folder silently reverts your templates to the
+bundled samples. To keep the data folder outside the checkout, set
+`PAPERTRACKER_USER_DATA_DIR=/path/to/dir`; templates stay at the repo root
+regardless.
 
 ## Configuration
 
@@ -269,13 +279,34 @@ split:
 
 | File | Holds | Tracked in git? |
 |---|---|---|
-| `papertracker.toml` | Runtime defaults: provider, models, sources, thresholds, output paths, Zotero, templates | Yes — keep it topic-neutral |
+| `config.toml` | Runtime defaults: provider, models, sources, thresholds, output paths, Zotero, templates | Yes — keep it topic-neutral |
 | `user_data/projects.toml` | Your topics, per-project overrides, and priority venues | No |
 | `~/.config/papertracker/config.toml` | Your provider and provider-specific model defaults | No — outside the checkout |
 
-Any field a project profile omits falls back to `papertracker.toml`. Without a
+Any field a project profile omits falls back to `config.toml`. Without a
 `user_data/projects.toml`, PaperTracker runs a single placeholder profile built
-entirely from `papertracker.toml`.
+entirely from `config.toml`.
+
+### Running from a checkout vs. an installed copy
+
+Everything above describes the checkout workflow this README documents, and it
+is the supported one. PaperTracker also runs when installed as a standalone
+tool, and the two modes read different files:
+
+```bash
+uv tool install /path/to/PaperTracker   # then just: papertracker --list-projects
+```
+
+| | Checkout (`uv run papertracker`) | Installed (`papertracker`) |
+|---|---|---|
+| Runtime defaults | `config.toml` at the repo root | `defaults.toml` inside the installed package |
+| Personal data | `<repo>/user_data/` | `$XDG_DATA_HOME/papertracker`, else `~/.local/share/papertracker` |
+| Summary templates | `<repo>/summary_templates/` | under the personal data dir above |
+
+`defaults.toml` is a copy of `config.toml` kept identical by a test. An
+installed copy has no editable repo config, so set your overrides in
+`~/.config/papertracker/config.toml` and `PAPERTRACKER_*` environment variables,
+or point `PAPERTRACKER_USER_DATA_DIR` wherever you want your data.
 
 ### Choosing your AI provider — precedence
 
@@ -287,7 +318,7 @@ the repo config.
 | CLI flag | `uv run papertracker --provider codex` | one run |
 | Env var | `export PAPERTRACKER_PROVIDER=codex` | per shell |
 | Personal config | `~/.config/papertracker/config.toml` → `provider = "codex"` | global user override |
-| Repo config | `papertracker.toml` → `provider = "codex"` | project default |
+| Repo config | `config.toml` → `provider = "codex"` | project default |
 
 `--model` and `PAPERTRACKER_MODEL` override the selected provider's configured
 default. In config files, set provider-specific defaults with `claude_model` and
@@ -297,8 +328,9 @@ default. In config files, set provider-specific defaults with `claude_model` and
 # ~/.config/papertracker/config.toml
 provider = "codex"
 claude_model = "sonnet"
-codex_model = "gpt-5.5"
+codex_model = "gpt-5.6-luna"
 ```
+
 
 ### Which model does what
 
@@ -308,9 +340,9 @@ load it.
 
 | Setting | Where it lives | Job | Runs when |
 |---|---|---|---|
-| `embedding_model` | `papertracker.toml` | Scores every paper against your `topic_statement` | Daily and related-work scoring |
-| `reranker_model` | `papertracker.toml` (per-profile override allowed) | Cross-encoder rerank of the top candidates | Only with `relevance_scorer = "hybrid"` **and** `enable_reranker = true` |
-| `claude_model` / `codex_model` | `papertracker.toml`, or `~/.config/papertracker/config.toml` | Writes the summaries | Unless `--no-summarize` |
+| `embedding_model` | `config.toml` | Scores every paper against your `topic_statement` | Daily and related-work scoring |
+| `reranker_model` | `config.toml` (per-profile override allowed) | Cross-encoder rerank of the top candidates | Only with `relevance_scorer = "hybrid"` **and** `enable_reranker = true` |
+| `claude_model` / `codex_model` | `config.toml`, or `~/.config/papertracker/config.toml` | Writes the summaries | Unless `--no-summarize` |
 
 There are two summarizer model keys rather than one because model names are not
 interchangeable between providers — this way `--provider codex` doesn't also
@@ -329,11 +361,11 @@ is the only place to set them.
 | Variable | Purpose | If unset, falls back to |
 |---|---|---|
 | `PAPERTRACKER_USER_DATA_DIR` | Where topics, digests, state, and caches live | **env-only** — `<repo>/user_data` in a checkout; `$XDG_DATA_HOME/papertracker` or `~/.local/share/papertracker` when installed |
-| `PAPERTRACKER_PROVIDER` | `claude` or `codex` | `provider` in `~/.config/papertracker/config.toml`, then `provider` in `papertracker.toml` (ships as `claude`) |
-| `PAPERTRACKER_MODEL` | Model for the selected provider | `claude_model` / `codex_model` in `~/.config/papertracker/config.toml`, then in `papertracker.toml` (`sonnet` / `gpt-5.5`) |
-| `PAPERTRACKER_EMAIL` | Crossref/OpenAlex/Unpaywall identifier | `user_email` in `papertracker.toml` (ships empty → anonymous requests) |
-| `PAPERTRACKER_ZOTERO_DIR` | Zotero data directory (holds `zotero.sqlite` + `storage/`) | `zotero_data_dir` in `papertracker.toml` (`~/Zotero`) |
-| `PAPERTRACKER_ZOTERO_LINKED_BASE` | Base dir for Zotero linked attachments (ZotFile-style) | `zotero_linked_base` in `papertracker.toml` (ships empty) |
+| `PAPERTRACKER_PROVIDER` | `claude` or `codex` | `provider` in `~/.config/papertracker/config.toml`, then `provider` in `config.toml` (ships as `claude`) |
+| `PAPERTRACKER_MODEL` | Model for the selected provider | `claude_model` / `codex_model` in `~/.config/papertracker/config.toml`, then in `config.toml` (`sonnet` / `gpt-5.6-luna`) |
+| `PAPERTRACKER_EMAIL` | Crossref/OpenAlex/Unpaywall identifier | `user_email` in `config.toml` (ships empty → anonymous requests) |
+| `PAPERTRACKER_ZOTERO_DIR` | Zotero data directory (holds `zotero.sqlite` + `storage/`) | `zotero_data_dir` in `config.toml` (`~/Zotero`) |
+| `PAPERTRACKER_ZOTERO_LINKED_BASE` | Base dir for Zotero linked attachments (ZotFile-style) | `zotero_linked_base` in `config.toml` (ships empty) |
 | `PAPERTRACKER_OPENALEX_API_KEY` | Optional free OpenAlex key | **env-only** — anonymous |
 | `PAPERTRACKER_SEMANTIC_SCHOLAR_API_KEY` | Optional free Semantic Scholar key | **env-only** — anonymous |
 | `PAPERTRACKER_CORE_API_KEY` | Optional free CORE key | **env-only** — anonymous |
@@ -353,8 +385,11 @@ Two local, non-LLM scorers:
   score, using `hybrid_relevance_threshold`. Can optionally add a local
   cross-encoder reranker.
 
-The model runs on CPU/ANE and scores ~100 abstracts in under 2 seconds on Apple
-Silicon.
+The model runs on CPU/ANE. Measured on Apple Silicon, it scores roughly 100
+abstracts every 8 seconds — so a full default fetch (up to 1500 papers per
+source) spends about two minutes scoring, on **every** run, not just the first.
+That is the bulk of a typical run's wall clock. Narrow `arxiv_categories` or
+lower `--max-results` if you want it faster.
 
 To tune, in this order of impact:
 
@@ -385,16 +420,21 @@ enable_reranker = true
 ## Summary templates
 
 Active summary formats are user-owned Markdown skeletons discovered from
-`user_data/summary_templates/`. On first use, PaperTracker copies in four
-curated samples only if that directory has no Markdown files:
+`summary_templates/` at the repository root. On first use, PaperTracker copies in
+four curated samples only if that directory has no Markdown files:
 
 ```text
-user_data/summary_templates/
+summary_templates/          # gitignored; yours to edit
 ├── abstract-screen.md
 ├── deep-human-study.md
 ├── deep-synthesis.md
 └── deep-technical.md
 ```
+
+The pristine originals are tracked at `src/papertracker/bundled_templates/` and
+are never read once your copy exists — delete a file from `summary_templates/`
+and the next run will *not* restore it, because seeding only happens when the
+whole directory is empty of Markdown.
 
 Each direct-child `*.md` filename becomes a dropdown option for every paper.
 There is no template-count limit. Every file starts with metadata that is
@@ -418,9 +458,23 @@ Use `--template ID` for a global choice. With `--select`, each paper can still
 use a different template and the global choice becomes the initial selection.
 Run `uv run papertracker --list-templates` to inspect the active catalog.
 
-In the headless fallback, a bare paper number uses the default; add
+### How `--select` presents the choice
+
+When stdin is a TTY, `--select` starts a short-lived HTTP server bound to
+`127.0.0.1` on a random port, prints the URL, and opens your default browser at
+it. Nothing is exposed off the machine, and the server closes as soon as you
+submit. When stdin is **not** a TTY — a cron job, piped input — it goes straight
+to a numbered text prompt instead.
+
+In that text prompt, a bare paper number uses the default template; add
 `:template-id` to choose another, e.g. `1,2:deep-human-study`. `a` selects all
 papers with the default template.
+
+**Over SSH**, stdin usually *is* a TTY, so PaperTracker still tries the browser
+path. If it cannot open one it does not error — it prints the URL and waits.
+Either forward that port and open it locally, or press Ctrl-C, which cancels the
+selection cleanly without summarizing anything. Do not use `--select` in
+unattended jobs.
 
 Template IDs are case-sensitive filename stems, shown alphabetically. Configure
 with:
@@ -431,7 +485,14 @@ default_abstract_template = "abstract-screen"
 default_fulltext_template = "deep-technical"
 ```
 
-Relative template directories resolve under `user_data/`. Cache identities
+A relative `summary_template_dir` resolves against the **repository root** in a
+checkout, and under the user data directory in an installed copy, which has no
+repository root. Give it an absolute path to pin one location for both. If you
+still have templates in the old `user_data/summary_templates/`, the first run
+copies them to the new location rather than seeding fresh samples over the top,
+and logs that it did; the old directory is left alone for you to delete.
+
+Cache identities
 include the paper metadata and evidence, template metadata and body, provider,
 model, and prompt-pipeline version, so any material edit regenerates the summary.
 
@@ -623,9 +684,27 @@ successful summaries are retained and failures are retried next time.
 | Too much noise | Raise `--threshold` (try 0.7) or sharpen `topic_statement`. |
 | `--list-projects` shows nothing | You haven't created `user_data/projects.toml` — see step 4. |
 | First run is slow | It's downloading the ~65 MB embedding model into `user_data/cache/fastembed/`. `uv sync` does not fetch it. Cached afterwards. |
-| Log says `capped at 1500 of N total` | Raise `max_results_per_query` in `papertracker.toml` or pass `--max-results`. Scoring is local, so the cost here is HTTP traffic and time. |
+| Log says `capped at 1500 of N total` | Raise `max_results_per_query` in `config.toml` or pass `--max-results`. Scoring is local, so the cost here is HTTP traffic and time. |
 | Re-summarize a paper you already saw | `--ignore-seen`, or delete `user_data/state/<project-id>/seen.json`. |
 | Inspect matches without spending quota | `--no-summarize`, which sorts by relevance score. |
+
+## Development
+
+`uv sync` already installs the dev tooling. To check a clone is healthy, or
+before sending a change:
+
+```bash
+uv run pytest                    # full suite, no network, seconds
+uv run ruff check src tests      # lint
+uv build                         # the wheel/sdist build must succeed
+```
+
+`.github/workflows/ci.yml` runs exactly those three plus `uv sync --locked`, so
+a green local run means a green CI run. Tests are offline and stub every HTTP
+call — nothing in the suite touches arXiv, Crossref, HuggingFace, or an AI CLI.
+
+If you change `config.toml`, copy it over `src/papertracker/defaults.toml`
+as well; `tests/test_bundled_defaults.py` fails if the two diverge.
 
 ## License
 
