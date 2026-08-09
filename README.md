@@ -21,6 +21,42 @@ threshold — writing one markdown file per topic per day.
 
 ---
 
+## Contents
+
+- [Prerequisites](#prerequisites)
+- [Setup, from zero](#setup-from-zero)
+  - [1. Install uv](#1-install-uv)
+  - [2. Clone and install](#2-clone-and-install)
+  - [3. Install and log into an AI CLI](#3-install-and-log-into-an-ai-cli)
+  - [4. Create your topics file](#4-create-your-topics-file)
+  - [5. Optional — identify yourself to the paper APIs](#5-optional--identify-yourself-to-the-paper-apis)
+  - [6. Verify it works](#6-verify-it-works)
+- [Credentials — where to get them](#credentials--where-to-get-them)
+- [Run](#run)
+  - [All CLI flags](#all-cli-flags)
+- [Where your data lives](#where-your-data-lives)
+- [Configuration](#configuration)
+  - [PaperTracker runs from a checkout](#papertracker-runs-from-a-checkout)
+  - [Choosing your AI provider — precedence](#choosing-your-ai-provider--precedence)
+  - [Reasoning effort](#reasoning-effort)
+  - [Which model does what](#which-model-does-what)
+  - [All environment variables](#all-environment-variables)
+- [Relevance filter](#relevance-filter)
+- [Summary templates](#summary-templates)
+  - [How `--select` presents the choice](#how---select-presents-the-choice)
+- [Zotero PDF batch mode](#zotero-pdf-batch-mode)
+- [Related-work mode](#related-work-mode)
+  - [Two ranking modes](#two-ranking-modes)
+- [How discovery works without API keys](#how-discovery-works-without-api-keys)
+- [Customizing venues and sources](#customizing-venues-and-sources)
+- [Privacy and data flow](#privacy-and-data-flow)
+- [Run it daily](#run-it-daily)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [License](#license)
+
+---
+
 ## Prerequisites
 
 | | |
