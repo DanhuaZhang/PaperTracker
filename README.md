@@ -218,6 +218,7 @@ read it before installing.
 |---|---|---|
 | `--provider claude\|codex` | `provider` in `config.toml` | Which CLI to shell out to |
 | `--model NAME` | `claude_model` / `codex_model` | Model for the selected provider |
+| `--effort LEVEL` | `reasoning_effort` in `config.toml` | Thinking effort per summary: `low`, `medium`, `high`, `xhigh`, `max`, or `default` |
 | `--no-summarize` | off | Skip the LLM. Daily mode prints matches; faceted related-work needs configured facets and writes conservative local annotations |
 | `--select` | off | Pick papers (and templates in summary workflows) in a **browser tab**; falls back to a numbered text prompt when headless. In daily mode, overrides `--no-summarize` |
 | `--template ID` | workflow default | Apply one template globally; `--select` can still override it per paper |
@@ -281,7 +282,7 @@ split:
 |---|---|---|
 | `config.toml` | Runtime defaults: provider, models, sources, thresholds, output paths, Zotero, templates | Yes — keep it topic-neutral |
 | `user_data/projects.toml` | Your topics, per-project overrides, and priority venues | No |
-| `~/.config/papertracker/config.toml` | Your provider and provider-specific model defaults | No — outside the checkout |
+| `~/.config/papertracker/config.toml` | Your provider, provider-specific model defaults, and reasoning effort | No — outside the checkout |
 
 Any field a project profile omits falls back to `config.toml`. Without a
 `user_data/projects.toml`, PaperTracker runs a single placeholder profile built
@@ -329,8 +330,57 @@ default. In config files, set provider-specific defaults with `claude_model` and
 provider = "codex"
 claude_model = "sonnet"
 codex_model = "gpt-5.6-luna"
+reasoning_effort = "medium"
 ```
 
+### Reasoning effort
+
+How hard the model thinks per summary. One scale covers both providers:
+
+```
+low  <  medium  <  high  <  xhigh  <  max
+```
+
+Higher levels spend more quota and take longer per paper; nothing else about the
+run changes. It ships as `medium`, and follows the same precedence as the
+provider — CLI flag, env var, personal config, repo config:
+
+| Method | How |
+|---|---|
+| CLI flag | `uv run papertracker --effort high` |
+| Env var | `export PAPERTRACKER_EFFORT=high` |
+| Personal config | `~/.config/papertracker/config.toml` → `reasoning_effort = "high"` |
+| Repo config | `config.toml` → `reasoning_effort = "high"` |
+
+Those five names are not a PaperTracker abstraction over two different vocabularies —
+they are the levels both CLIs already accept under exactly these names, so the value
+is forwarded through untranslated:
+
+| Provider | What PaperTracker adds to the command |
+|---|---|
+| `claude` | `--effort high` |
+| `codex` | `-c model_reasoning_effort="high"` |
+
+Set `reasoning_effort = "default"` (or `--effort default`) to send neither flag and
+leave each CLI on its own built-in default. That is also the right choice if you want
+a level outside the shared five: Codex models vary in what they support — `gpt-5.6-luna`
+takes `low` through `max`, while `gpt-5.6-sol` and `gpt-5.6-terra` add an `ultra` level
+that Claude Code has no equivalent for. PaperTracker does not expose `ultra`, because a
+value that silently means something different depending on the provider is worse than
+one that is not offered. To use it anyway, set `--effort default` here and
+`model_reasoning_effort = "ultra"` in `~/.codex/config.toml`.
+
+To see the levels a Codex model supports, without spending any quota:
+
+```bash
+codex debug models   # per-model supported_reasoning_levels
+```
+
+Every run logs which level it resolved and where it came from:
+
+```
+INFO Effort:   high (from CLI flag --effort)
+```
 
 ### Which model does what
 
@@ -363,6 +413,7 @@ is the only place to set them.
 | `PAPERTRACKER_USER_DATA_DIR` | Where topics, digests, state, and caches live | **env-only** — `<repo>/user_data` in a checkout; `$XDG_DATA_HOME/papertracker` or `~/.local/share/papertracker` when installed |
 | `PAPERTRACKER_PROVIDER` | `claude` or `codex` | `provider` in `~/.config/papertracker/config.toml`, then `provider` in `config.toml` (ships as `claude`) |
 | `PAPERTRACKER_MODEL` | Model for the selected provider | `claude_model` / `codex_model` in `~/.config/papertracker/config.toml`, then in `config.toml` (`sonnet` / `gpt-5.6-luna`) |
+| `PAPERTRACKER_EFFORT` | Thinking effort per summary, for either provider | `reasoning_effort` in `~/.config/papertracker/config.toml`, then in `config.toml` (ships as `medium`) |
 | `PAPERTRACKER_EMAIL` | Crossref/OpenAlex/Unpaywall identifier | `user_email` in `config.toml` (ships empty → anonymous requests) |
 | `PAPERTRACKER_ZOTERO_DIR` | Zotero data directory (holds `zotero.sqlite` + `storage/`) | `zotero_data_dir` in `config.toml` (`~/Zotero`) |
 | `PAPERTRACKER_ZOTERO_LINKED_BASE` | Base dir for Zotero linked attachments (ZotFile-style) | `zotero_linked_base` in `config.toml` (ships empty) |

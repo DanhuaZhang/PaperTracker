@@ -451,12 +451,38 @@ def _invoke(provider: str, model: str, prompt: str) -> str:
     raise ValueError(f"Unknown provider: {provider}")
 
 
+# Reasoning effort applies to the whole run rather than to one paper, so it is
+# resolved once by the CLI and held here instead of being threaded through every
+# summarize call beside provider/model. None forwards no effort flag, leaving
+# each CLI on its own default — the safe starting point for any caller that
+# reaches a provider without going through the CLI's resolution step.
+_REASONING_EFFORT: str | None = None
+
+
+def set_reasoning_effort(effort: str | None) -> None:
+    """Set the effort every later provider invocation in this run will use."""
+    global _REASONING_EFFORT
+    _REASONING_EFFORT = effort
+
+
+def _claude_effort_args() -> list[str]:
+    return ["--effort", _REASONING_EFFORT] if _REASONING_EFFORT else []
+
+
+def _codex_effort_args() -> list[str]:
+    if not _REASONING_EFFORT:
+        return []
+    # The value is parsed as TOML, so the quotes make it an unambiguous string.
+    return ["-c", f'model_reasoning_effort="{_REASONING_EFFORT}"']
+
+
 def _summarize_claude(prompt: str, model: str, pdf_path=None) -> str:
     cmd = [
         "claude",
         "-p",
         "--model",
         model,
+        *_claude_effort_args(),
         "--output-format",
         "text",
         "--disallowed-tools",
@@ -482,6 +508,7 @@ def _summarize_codex(prompt: str, model: str, pdf_path=None) -> str:
         "--skip-git-repo-check",
         "--model",
         model,
+        *_codex_effort_args(),
         "-",
     ]
     result = subprocess.run(

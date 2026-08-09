@@ -133,6 +133,11 @@ def _load_projects_config() -> dict:
 DEFAULT_PROVIDER = _cfg("provider")
 CLAUDE_MODEL = _cfg("claude_model")
 CODEX_MODEL = _cfg("codex_model")
+
+# Added after the other keys, so a config file written by an earlier version
+# will not have it. Default rather than fail, unlike every _cfg key above.
+REASONING_EFFORT = _PROJECT_CONFIG.get("reasoning_effort", "medium")
+
 # CrossRef / OpenAlex polite-pool identifier. Set PAPERTRACKER_EMAIL in your shell
 # (or leave unset for anonymous requests — works, but with lower rate-limit priority).
 # Nothing is sent *from* this email; it's only included in outbound request metadata

@@ -9,6 +9,13 @@ provider = "claude"
 claude_model = "sonnet"
 codex_model = "gpt-5.6-luna"
 
+# How hard the model thinks per summary. One shared scale for both providers:
+# "low", "medium", "high", "xhigh", or "max" — the value is passed through
+# verbatim as `claude --effort <level>` or `codex -c model_reasoning_effort=`.
+# Higher levels cost more quota and take longer. Set it to "default" to pass
+# nothing and let each CLI apply its own.
+reasoning_effort = "medium"
+
 # Crossref / OpenAlex polite-pool identifier.
 # Leave empty for anonymous requests, or set PAPERTRACKER_EMAIL in your shell.
 user_email = ""

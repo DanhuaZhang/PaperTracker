@@ -1,8 +1,9 @@
-"""Provider/model resolution with explicit precedence.
+"""Provider/model/effort resolution with explicit precedence.
 
 Provider order: CLI flag, environment variable, personal config, project config.
 Model order: CLI flag, environment variable, then the selected provider's
 `claude_model` or `codex_model` key from personal config or project config.
+Effort order matches provider, reading the `reasoning_effort` key.
 """
 from __future__ import annotations
 
@@ -16,6 +17,21 @@ CONFIG_PATH = Path.home() / ".config" / "papertracker" / "config.toml"
 PROJECT_CONFIG_PATH = config.PROJECT_CONFIG_PATH
 
 _VALID_PROVIDERS = ("claude", "codex")
+
+# The reasoning levels both CLIs accept under these names, weakest first. Claude
+# Code's `--effort` takes exactly this set; Codex accepts it for the models
+# PaperTracker defaults to. Sharing the vocabulary is what lets a level be
+# forwarded verbatim instead of translated, so it carries the same meaning
+# whichever provider runs. Codex-only levels ("minimal", and "ultra" on some
+# models) are deliberately absent — Claude Code has no equivalent to map them to.
+VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+# Send no effort flag at all and let each CLI apply its own built-in default.
+# Spelled the same way on the command line, in the environment, and in TOML; an
+# empty string means the same thing, since that is the natural way to write
+# "unset" in a config file.
+INHERIT_EFFORT = "default"
+_INHERIT_SPELLINGS = (INHERIT_EFFORT, "")
 
 
 def _load_toml_config(path: Path) -> dict:
@@ -90,3 +106,47 @@ def resolve_model(cli_arg: str | None, provider: str) -> tuple[str, str]:
 
     default = config.CLAUDE_MODEL if provider == "claude" else config.CODEX_MODEL
     return default, f"provider fallback in {PROJECT_CONFIG_PATH}"
+
+
+def _validated_effort(value: object, origin: str) -> str | None:
+    """Normalize one layer's value, or explain what the accepted ones are.
+
+    Returns None for "inherit", so callers get a level to forward or nothing to
+    forward and never have to know how the sentinel is spelled.
+    """
+    if value in _INHERIT_SPELLINGS:
+        return None
+    if value not in VALID_EFFORTS:
+        raise ValueError(
+            f"Invalid reasoning effort {value!r} in {origin}. Choose one of: "
+            f"{', '.join(VALID_EFFORTS)}, or {INHERIT_EFFORT!r} to let each "
+            "provider apply its own."
+        )
+    return str(value)
+
+
+def resolve_effort(cli_arg: str | None) -> tuple[str | None, str]:
+    """Return (effort, source_description), shared by both providers.
+
+    An effort of None means forward no effort flag at all.
+    """
+    if cli_arg is not None:
+        return _validated_effort(cli_arg, "CLI flag --effort"), "CLI flag --effort"
+
+    env = os.environ.get("PAPERTRACKER_EFFORT")
+    if env is not None:
+        origin = "env var PAPERTRACKER_EFFORT"
+        return _validated_effort(env, origin), origin
+
+    toml_cfg = _load_toml_config(CONFIG_PATH)
+    if "reasoning_effort" in toml_cfg:
+        origin = f"config file {CONFIG_PATH}"
+        return _validated_effort(toml_cfg["reasoning_effort"], origin), origin
+
+    project_cfg = _load_toml_config(PROJECT_CONFIG_PATH)
+    if "reasoning_effort" in project_cfg:
+        origin = f"project config file {PROJECT_CONFIG_PATH}"
+        return _validated_effort(project_cfg["reasoning_effort"], origin), origin
+
+    origin = f"built-in default ({PROJECT_CONFIG_PATH} has no reasoning_effort)"
+    return _validated_effort(config.REASONING_EFFORT, origin), origin

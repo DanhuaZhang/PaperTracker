@@ -133,6 +133,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Model name. Overrides env var / config file.",
     )
     p.add_argument(
+        "--effort", choices=(*settings.VALID_EFFORTS, settings.INHERIT_EFFORT),
+        default=None, metavar="LEVEL",
+        help=(
+            "How hard the model thinks per summary, on one scale for both "
+            f"providers: {', '.join(settings.VALID_EFFORTS)} "
+            f"(currently {config.REASONING_EFFORT!r}), or "
+            f"{settings.INHERIT_EFFORT!r} to let the provider CLI choose. "
+            "Overrides env var / config file."
+        ),
+    )
+    p.add_argument(
         "--sources",
         default=None,
         help=(
@@ -221,16 +232,22 @@ def _resolve_window(args: argparse.Namespace) -> tuple[dt.date, dt.date]:
 
 
 def _resolve_llm(args: argparse.Namespace) -> tuple[str | None, str | None, int]:
-    """Resolve provider+model and preflight the CLI. Returns (provider, model, code);
-    code is 0 on success, otherwise the exit code main() should return."""
+    """Resolve provider+model+effort and preflight the CLI. Returns (provider, model,
+    code); code is 0 on success, otherwise the exit code main() should return."""
     try:
         provider, prov_src = settings.resolve_provider(args.provider)
         model, model_src = settings.resolve_model(args.model, provider)
+        effort, effort_src = settings.resolve_effort(args.effort)
     except ValueError as e:
         log.error(str(e))
         return None, None, 2
     log.info("Provider: %s (from %s)", provider, prov_src)
     log.info("Model:    %s (from %s)", model, model_src)
+    log.info(
+        "Effort:   %s (from %s)",
+        effort or "provider default", effort_src,
+    )
+    summarizer.set_reasoning_effort(effort)
     try:
         summarizer.preflight(provider)
     except SystemExit as e:
