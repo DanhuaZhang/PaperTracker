@@ -13,7 +13,6 @@ from . import related_work
 
 log = logging.getLogger(__name__)
 
-PACKAGE_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _LEGACY_REPOSITORY_CONFIG_PATH = REPOSITORY_ROOT / "papertracker.toml"
 
@@ -35,44 +34,27 @@ def _repository_config_path() -> Path:
 
 
 _REPOSITORY_CONFIG_PATH = _repository_config_path()
-_IN_SOURCE_CHECKOUT = (
-    _REPOSITORY_CONFIG_PATH.is_file()
-    and (REPOSITORY_ROOT / "pyproject.toml").is_file()
-)
-ROOT = REPOSITORY_ROOT if _IN_SOURCE_CHECKOUT else PACKAGE_DIR
-BUNDLED_CONFIG_PATH = PACKAGE_DIR / "defaults.toml"
-BUNDLED_TEMPLATE_DIR = PACKAGE_DIR / "bundled_templates"
 
 
 class ConfigError(RuntimeError):
     """Raised when a PaperTracker configuration value is invalid."""
 
 
-def _default_user_data_dir() -> Path:
-    if _IN_SOURCE_CHECKOUT:
-        return REPOSITORY_ROOT / "user_data"
-    data_home = os.environ.get("XDG_DATA_HOME", "").strip()
-    base = Path(data_home).expanduser() if data_home else Path.home() / ".local" / "share"
-    return base / "papertracker"
-
 # Everything machine-local — your topics, generated digests, run state, and the
 # downloaded embedding model — lives under one gitignored folder. Override with
 # PAPERTRACKER_USER_DATA_DIR to keep it outside the checkout.
 USER_DATA_DIR = Path(
-    os.environ.get("PAPERTRACKER_USER_DATA_DIR") or _default_user_data_dir()
+    os.environ.get("PAPERTRACKER_USER_DATA_DIR") or REPOSITORY_ROOT / "user_data"
 ).expanduser()
 
-PROJECT_CONFIG_PATH = globals().get(
-    "PROJECT_CONFIG_PATH",
-    _REPOSITORY_CONFIG_PATH if _IN_SOURCE_CHECKOUT else BUNDLED_CONFIG_PATH,
-)
+PROJECT_CONFIG_PATH = globals().get("PROJECT_CONFIG_PATH", _REPOSITORY_CONFIG_PATH)
 
 def _default_projects_config_path() -> Path:
     """Prefer user_data/projects.toml; tolerate the pre-user_data repo-root location."""
     preferred = USER_DATA_DIR / "projects.toml"
     if preferred.is_file():
         return preferred
-    legacy = ROOT / "projects.toml"
+    legacy = REPOSITORY_ROOT / "projects.toml"
     if legacy.is_file():
         log.warning(
             "Reading project profiles from %s. Move it to %s — the repo-root location is deprecated.",
@@ -97,7 +79,14 @@ def _user_path(relative: str | Path) -> str:
 
 def _load_project_config() -> dict:
     if not PROJECT_CONFIG_PATH.is_file():
-        raise ConfigError(f"Runtime configuration file not found: {PROJECT_CONFIG_PATH}")
+        # The usual cause is running an installed copy from outside the repo.
+        # PaperTracker reads its defaults from the checkout, so there is nothing
+        # to fall back to.
+        raise ConfigError(
+            f"Runtime configuration file not found: {PROJECT_CONFIG_PATH}. "
+            "PaperTracker runs from a source checkout — clone the repository and "
+            "run 'uv run papertracker' from it."
+        )
     try:
         with PROJECT_CONFIG_PATH.open("rb") as f:
             return tomllib.load(f)
@@ -430,51 +419,26 @@ def zotero_linked_base_dir() -> Path | None:
 
 # --- Markdown summary templates -------------------------------------------
 def summary_template_directory() -> Path:
-    """Return the active user-owned template directory.
+    """Return the one directory holding every summary template.
 
-    Relative paths resolve against the repository root in a source checkout, so
-    templates sit beside the code where they are easy to edit. An installed copy
-    has no repository root, so they resolve under the user data directory.
+    The templates are tracked in git at the repository root, so a relative
+    ``summary_template_dir`` resolves against it. There is no second copy: what
+    is on disk here is what the summarizer fills in and what the --select
+    dropdown offers.
     """
     directory = Path(SUMMARY_TEMPLATE_DIR).expanduser()
     if directory.is_absolute():
         return directory
-    base = REPOSITORY_ROOT if _IN_SOURCE_CHECKOUT else USER_DATA_DIR
-    return base / directory
-
-
-def _legacy_summary_template_directory() -> Path | None:
-    """Pre-move location, still holding templates a user may have customized."""
-    if not _IN_SOURCE_CHECKOUT:
-        return None
-    legacy = USER_DATA_DIR / Path(SUMMARY_TEMPLATE_DIR)
-    if legacy == summary_template_directory() or not legacy.is_dir():
-        return None
-    has_markdown = any(
-        path.is_file() and path.suffix == ".md" for path in legacy.iterdir()
-    )
-    return legacy if has_markdown else None
+    return REPOSITORY_ROOT / directory
 
 
 def summary_template_catalog(default_evidence: str = "abstract"):
-    """Seed/discover templates and return (all templates, evidence default)."""
+    """Discover templates and return (all templates, evidence default)."""
     from . import summary_templates
 
     if default_evidence not in summary_templates.EVIDENCE_TYPES:
         raise ConfigError(f"Unknown template evidence type {default_evidence!r}")
     directory = summary_template_directory()
-    # Templates used to live under user_data/. Carry a customized set forward
-    # rather than seeding pristine samples over the top of it.
-    legacy = _legacy_summary_template_directory()
-    source = legacy if legacy is not None else BUNDLED_TEMPLATE_DIR
-    if summary_templates.seed_if_empty(directory, source) and legacy is not None:
-        log.warning(
-            "Copied summary templates from the former location %s to %s. "
-            "Edit them there from now on; the old directory is no longer read "
-            "and can be deleted.",
-            legacy,
-            directory,
-        )
     templates, _ = summary_templates.discover(directory)
     by_id = {template.id: template for template in templates}
     defaults = {

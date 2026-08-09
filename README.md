@@ -248,7 +248,7 @@ reused* for papers that are processed.
 ## Where your data lives
 
 ```
-summary_templates/*.md                # your editable summary formats (gitignored)
+summary_templates/*.md                # your summary formats (tracked in git)
 user_data/                            # gitignored in full
 ├── projects.toml                     # your topics
 ├── digests/<project-id>/YYYY-MM-DD.md
@@ -265,13 +265,11 @@ into that day's digest. An empty later run leaves the existing digest untouched.
 Only successfully summarized papers enter `seen.json`; failures exit nonzero and
 remain eligible for the next run.
 
-**Moving to a new machine** is: clone, follow Setup, then copy across **both**
-`user_data/` *and* `summary_templates/`. Templates sit at the repository root so
-they are easy to edit, which means `user_data/` on its own is no longer a
-complete backup — copying only that folder silently reverts your templates to the
-bundled samples. To keep the data folder outside the checkout, set
-`PAPERTRACKER_USER_DATA_DIR=/path/to/dir`; templates stay at the repo root
-regardless.
+**Moving to a new machine** is: clone, follow Setup, copy `user_data/` across.
+Templates come with the clone because they are tracked, so `user_data/` is the
+only thing you have to carry — unless you edited a shipped template, in which
+case commit that change or copy `summary_templates/` too. To keep the data
+folder outside the checkout, set `PAPERTRACKER_USER_DATA_DIR=/path/to/dir`.
 
 ## Configuration
 
@@ -280,7 +278,8 @@ split:
 
 | File | Holds | Tracked in git? |
 |---|---|---|
-| `config.toml` | Runtime defaults: provider, models, sources, thresholds, output paths, Zotero, templates | Yes — keep it topic-neutral |
+| `config.toml` | Runtime defaults: provider, models, effort, sources, thresholds, output paths, Zotero, templates | Yes — keep it topic-neutral |
+| `summary_templates/*.md` | The summary formats, one file per dropdown option | Yes — edit in place |
 | `user_data/projects.toml` | Your topics, per-project overrides, and priority venues | No |
 | `~/.config/papertracker/config.toml` | Your provider, provider-specific model defaults, and reasoning effort | No — outside the checkout |
 
@@ -288,26 +287,14 @@ Any field a project profile omits falls back to `config.toml`. Without a
 `user_data/projects.toml`, PaperTracker runs a single placeholder profile built
 entirely from `config.toml`.
 
-### Running from a checkout vs. an installed copy
+### PaperTracker runs from a checkout
 
-Everything above describes the checkout workflow this README documents, and it
-is the supported one. PaperTracker also runs when installed as a standalone
-tool, and the two modes read different files:
-
-```bash
-uv tool install /path/to/PaperTracker   # then just: papertracker --list-projects
-```
-
-| | Checkout (`uv run papertracker`) | Installed (`papertracker`) |
-|---|---|---|
-| Runtime defaults | `config.toml` at the repo root | `defaults.toml` inside the installed package |
-| Personal data | `<repo>/user_data/` | `$XDG_DATA_HOME/papertracker`, else `~/.local/share/papertracker` |
-| Summary templates | `<repo>/summary_templates/` | under the personal data dir above |
-
-`defaults.toml` is a copy of `config.toml` kept identical by a test. An
-installed copy has no editable repo config, so set your overrides in
-`~/.config/papertracker/config.toml` and `PAPERTRACKER_*` environment variables,
-or point `PAPERTRACKER_USER_DATA_DIR` wherever you want your data.
+Always `uv run papertracker` from inside the clone. Its runtime defaults and its
+summary templates are files in the repository, so there is nothing to read from
+outside it — `uv tool install` is not supported and fails with a message saying
+so. To keep your data elsewhere, point `PAPERTRACKER_USER_DATA_DIR` at any
+directory; to override settings without editing the tracked `config.toml`, use
+`~/.config/papertracker/config.toml` or the `PAPERTRACKER_*` variables.
 
 ### Choosing your AI provider — precedence
 
@@ -475,17 +462,22 @@ Active summary formats are user-owned Markdown skeletons discovered from
 four curated samples only if that directory has no Markdown files:
 
 ```text
-summary_templates/          # gitignored; yours to edit
+summary_templates/          # tracked in git; the only copy
 ├── abstract-screen.md
 ├── deep-human-study.md
 ├── deep-synthesis.md
 └── deep-technical.md
 ```
 
-The pristine originals are tracked at `src/papertracker/bundled_templates/` and
-are never read once your copy exists — delete a file from `summary_templates/`
-and the next run will *not* restore it, because seeding only happens when the
-whole directory is empty of Markdown.
+**This is the only place templates live.** What is in this folder is exactly what
+the summarizer fills in and what the `--select` dropdown offers — there is no
+packaged copy shadowing it and nothing re-seeds it, so deleting a file removes
+that option for good (`git checkout summary_templates/` brings it back).
+
+To make your own, **copy a sample to a new name** and edit that. A new file is
+untracked, so it never collides with a `git pull`. Editing one of the four
+shipped templates works too and simply shows up as a normal modification in
+`git status`.
 
 Each direct-child `*.md` filename becomes a dropdown option for every paper.
 There is no template-count limit. Every file starts with metadata that is
@@ -536,12 +528,8 @@ default_abstract_template = "abstract-screen"
 default_fulltext_template = "deep-technical"
 ```
 
-A relative `summary_template_dir` resolves against the **repository root** in a
-checkout, and under the user data directory in an installed copy, which has no
-repository root. Give it an absolute path to pin one location for both. If you
-still have templates in the old `user_data/summary_templates/`, the first run
-copies them to the new location rather than seeding fresh samples over the top,
-and logs that it did; the old directory is left alone for you to delete.
+A relative `summary_template_dir` resolves against the **repository root**; give
+it an absolute path to keep your templates somewhere else entirely.
 
 Cache identities
 include the paper metadata and evidence, template metadata and body, provider,
@@ -754,8 +742,8 @@ uv build                         # the wheel/sdist build must succeed
 a green local run means a green CI run. Tests are offline and stub every HTTP
 call — nothing in the suite touches arXiv, Crossref, HuggingFace, or an AI CLI.
 
-If you change `config.toml`, copy it over `src/papertracker/defaults.toml`
-as well; `tests/test_bundled_defaults.py` fails if the two diverge.
+`config.toml` and `summary_templates/` are each a single tracked copy that the
+code reads directly, so editing them needs no follow-up sync step.
 
 ## License
 

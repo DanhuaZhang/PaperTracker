@@ -40,56 +40,6 @@ class SummaryTemplate:
         }
 
 
-def seed_if_empty(directory: Path, samples_directory: Path) -> bool:
-    """Seed bundled samples iff ``directory`` has no direct-child Markdown files.
-
-    Existing files are never overwritten. Returns true when samples were copied.
-    """
-    if directory.exists() and not directory.is_dir():
-        raise config.ConfigError(f"Summary template path is not a directory: {directory}")
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-        existing = [
-            path for path in directory.iterdir()
-            if path.is_file() and path.suffix == ".md"
-        ]
-    except OSError as exc:
-        raise config.ConfigError(
-            f"Could not initialize summary template directory {directory}: {exc}"
-        ) from exc
-    if existing:
-        return False
-
-    try:
-        samples = sorted(
-            (
-                path for path in samples_directory.iterdir()
-                if path.is_file() and path.suffix == ".md"
-            ),
-            key=lambda path: path.name,
-        )
-    except OSError as exc:
-        raise config.ConfigError(
-            f"Could not read bundled summary templates {samples_directory}: {exc}"
-        ) from exc
-    if not samples:
-        raise config.ConfigError(
-            f"Bundled summary template directory contains no .md templates: "
-            f"{samples_directory}"
-        )
-
-    try:
-        for source in samples:
-            destination = directory / source.name
-            if not destination.exists():
-                destination.write_bytes(source.read_bytes())
-    except OSError as exc:
-        raise config.ConfigError(
-            f"Could not seed summary template {destination}: {exc}"
-        ) from exc
-    return True
-
-
 def discover(
     directory: Path, default_id: str | None = None
 ) -> tuple[tuple[SummaryTemplate, ...], SummaryTemplate | None]:

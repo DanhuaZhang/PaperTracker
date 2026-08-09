@@ -15,10 +15,6 @@ user_data/*
 !user_data/.gitkeep
 !user_data/README.md
 
-# Your editable summary templates, seeded here on first run. The pristine
-# samples they are seeded from are tracked at src/papertracker/bundled_templates/.
-/summary_templates/
-
 # Tool caches
 .pytest_cache/
 .ruff_cache/
