@@ -182,7 +182,13 @@ def test_collection_papers_resolves_pdf_items_by_full_path(tmp_path):
     papers = zotero.collection_papers("Reading/Deep Reading", data_dir=data_dir)
 
     assert [paper["title"] for paper in papers] == ["Reading Paper"]
-    assert papers[0]["pdf_path"].endswith("storage/PDF00001/reading.pdf")
+    # Compare parts, not a slash-joined string: the path is native, so it uses
+    # backslashes on Windows.
+    assert Path(papers[0]["pdf_path"]).parts[-3:] == (
+        "storage",
+        "PDF00001",
+        "reading.pdf",
+    )
     assert papers[0]["canonical_id"] == "zotero:READING1"
 
 

@@ -3,6 +3,7 @@
 Every test here runs on all three platforms; each one covers a bug that is
 invisible on macOS and fatal on Windows.
 """
+import os
 import sqlite3
 import stat
 import sys
@@ -24,6 +25,16 @@ def _fake_cli(directory, name):
     return path
 
 
+def _same_path(a, b) -> bool:
+    """Compare paths the way the OS does.
+
+    shutil.which spells the extension the way PATHEXT does (".CMD"), not the
+    way the file does, so an exact string match fails on Windows for two paths
+    that name the same executable. normcase is identity on POSIX.
+    """
+    return os.path.normcase(str(a)) == os.path.normcase(str(b))
+
+
 @pytest.mark.parametrize("provider", ["claude", "codex"])
 def test_a_provider_on_path_is_spawned_by_full_path_not_bare_name(
     provider, monkeypatch, tmp_path
@@ -34,8 +45,9 @@ def test_a_provider_on_path_is_spawned_by_full_path_not_bare_name(
 
     resolved = summarizer.resolve_binary(provider)
 
-    assert resolved == str(expected)
+    assert _same_path(resolved, expected)
     assert resolved != provider, "a bare name is not resolvable by CreateProcess"
+    assert os.path.isabs(resolved), "subprocess needs a path, not a lookup"
 
 
 @pytest.mark.parametrize("provider", ["claude", "codex"])
@@ -60,7 +72,7 @@ def test_the_spawned_argv_leads_with_the_resolved_path(monkeypatch, tmp_path):
         run.return_value = mock.Mock(stdout="ok")
         summarizer._summarize_claude("prompt", "sonnet")
 
-    assert run.call_args.args[0][0] == str(expected)
+    assert _same_path(run.call_args.args[0][0], expected)
 
 
 def test_zotero_opens_a_database_under_a_path_containing_a_space(tmp_path):
