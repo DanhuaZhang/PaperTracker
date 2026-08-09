@@ -401,7 +401,9 @@ def resolve_project(project_id: str | None = None) -> ProjectProfile:
 
 
 # --- Zotero integration -----------------------------------------------------
-# Default macOS/Linux data dir is ~/Zotero. Override with PAPERTRACKER_ZOTERO_DIR.
+# Zotero's own default data dir is ~/Zotero on every platform it ships for, and
+# expanduser() lands on C:\Users\<you>\Zotero under Windows, so one default
+# covers all three. Override with PAPERTRACKER_ZOTERO_DIR.
 def zotero_data_dir() -> Path:
     env = os.environ.get("PAPERTRACKER_ZOTERO_DIR")
     default = _cfg("zotero_data_dir")

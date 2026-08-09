@@ -54,6 +54,24 @@ def binary_for(provider: str) -> str:
     raise ValueError(f"Unknown provider: {provider}")
 
 
+def resolve_binary(provider: str) -> str:
+    """Return what to spawn for a provider: its full path, or the bare name.
+
+    Spawning by bare name is not portable. Windows' CreateProcess appends only
+    ``.exe`` when it searches PATH, so an npm-installed ``claude.cmd`` shim is
+    invisible to it even though ``shutil.which`` finds it — `preflight` would
+    pass and then every summarize call would die with FileNotFoundError.
+    Handing subprocess the resolved path, extension included, is the one form
+    both platforms can execute.
+
+    Falling back to the bare name rather than raising keeps `preflight` the
+    single place that reports a missing CLI, and keeps the argv shape testable
+    on a machine that has neither provider installed.
+    """
+    binary = binary_for(provider)
+    return shutil.which(binary) or binary
+
+
 def preflight(provider: str) -> None:
     binary = binary_for(provider)
     if shutil.which(binary) is None:
@@ -478,7 +496,7 @@ def _codex_effort_args() -> list[str]:
 
 def _summarize_claude(prompt: str, model: str, pdf_path=None) -> str:
     cmd = [
-        "claude",
+        resolve_binary("claude"),
         "-p",
         "--model",
         model,
@@ -501,7 +519,7 @@ def _summarize_claude(prompt: str, model: str, pdf_path=None) -> str:
 
 def _summarize_codex(prompt: str, model: str, pdf_path=None) -> str:
     cmd = [
-        "codex",
+        resolve_binary("codex"),
         "exec",
         "--sandbox",
         "read-only",

@@ -1,0 +1,109 @@
+"""Guards for the assumptions that only break off the development machine.
+
+Every test here runs on all three platforms; each one covers a bug that is
+invisible on macOS and fatal on Windows.
+"""
+import sqlite3
+import stat
+import sys
+from unittest import mock
+
+import pytest
+
+from papertracker import bootstrap, summarizer, zotero
+
+
+def _fake_cli(directory, name):
+    """Create an executable stub and return the path callers should get back."""
+    # .cmd is how npm installs a CLI on Windows, and the extension is exactly
+    # what CreateProcess needs spelled out for it.
+    suffix = ".cmd" if sys.platform == "win32" else ""
+    path = directory / f"{name}{suffix}"
+    path.write_text("", encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return path
+
+
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+def test_a_provider_on_path_is_spawned_by_full_path_not_bare_name(
+    provider, monkeypatch, tmp_path
+):
+    """The Windows shim bug: which() finds claude.cmd, CreateProcess never does."""
+    expected = _fake_cli(tmp_path, provider)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    resolved = summarizer.resolve_binary(provider)
+
+    assert resolved == str(expected)
+    assert resolved != provider, "a bare name is not resolvable by CreateProcess"
+
+
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+def test_a_missing_provider_falls_back_so_preflight_owns_the_error(
+    provider, monkeypatch, tmp_path
+):
+    """One place reports "not installed", and it is not the argv builder."""
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    assert summarizer.resolve_binary(provider) == provider
+
+    with pytest.raises(SystemExit) as excinfo:
+        summarizer.preflight(provider)
+    assert provider in str(excinfo.value)
+
+
+def test_the_spawned_argv_leads_with_the_resolved_path(monkeypatch, tmp_path):
+    expected = _fake_cli(tmp_path, "claude")
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    with mock.patch("papertracker.summarizer.subprocess.run") as run:
+        run.return_value = mock.Mock(stdout="ok")
+        summarizer._summarize_claude("prompt", "sonnet")
+
+    assert run.call_args.args[0][0] == str(expected)
+
+
+def test_zotero_opens_a_database_under_a_path_containing_a_space(tmp_path):
+    """Windows temp dirs sit under C:\\Users\\First Last\\ more often than not."""
+    data_dir = tmp_path / "Zotero Data"
+    data_dir.mkdir()
+    con = sqlite3.connect(data_dir / "zotero.sqlite")
+    con.execute("CREATE TABLE items (itemID INTEGER)")
+    con.commit()
+    con.close()
+
+    copied = zotero._copy_db(data_dir)
+    assert copied is not None, "a URI built by interpolation would fail here"
+    tmp, con = copied
+    try:
+        assert con.execute("SELECT count(*) FROM items").fetchone() == (0,)
+        with pytest.raises(sqlite3.OperationalError):
+            con.execute("CREATE TABLE written (x)")
+    finally:
+        con.close()
+        tmp.cleanup()
+
+
+def test_forcing_utf8_output_is_a_no_op_off_windows_and_safe_under_capture():
+    """Must not explode when stdout is pytest's capture rather than a real stream."""
+    bootstrap._force_utf8_output()
+
+
+def test_forcing_utf8_output_reconfigures_both_streams_on_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    stdout, stderr = mock.Mock(), mock.Mock()
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    bootstrap._force_utf8_output()
+
+    stdout.reconfigure.assert_called_once_with(encoding="utf-8")
+    stderr.reconfigure.assert_called_once_with(encoding="utf-8")
+
+
+def test_every_shipped_template_is_stored_with_unix_newlines():
+    """.gitattributes pins this; a CRLF template would reach the model prompt."""
+    from papertracker import config
+
+    for template in sorted(config.summary_template_directory().glob("*.md")):
+        assert b"\r\n" not in template.read_bytes(), f"{template.name} has CRLF"

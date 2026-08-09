@@ -1,0 +1,11 @@
+# Normalize every text file to LF in the repository, whatever the contributor's
+# platform or core.autocrlf setting. Without this, a Windows clone can rewrite
+# summary_templates/*.md to CRLF, which then reaches the model prompts and shows
+# up as spurious whole-file diffs when that machine commits.
+* text=auto eol=lf
+
+# Binary formats that must never be touched by newline conversion.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.sqlite binary

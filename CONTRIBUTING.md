@@ -26,10 +26,16 @@ uv run ruff check src tests      # lint
 uv build                         # the wheel/sdist build must succeed
 ```
 
-CI runs exactly these plus `uv sync --locked`, so a green local run means a
-green CI run. The suite is offline and stubs every HTTP call — nothing in it
+CI runs exactly these plus `uv sync --locked`, on Ubuntu, macOS, and Windows. A
+green local run means a green CI run on your platform; the matrix covers the
+other two. The suite is offline and stubs every HTTP call — nothing in it
 touches arXiv, Crossref, HuggingFace, or an AI CLI. **Tests must not call an AI
 CLI or spend anyone's quota.**
+
+PaperTracker is developed on macOS but supported on all three. If your change
+spawns a subprocess, builds a URI from a path, writes a file, or prints
+non-ASCII, add a case to `tests/test_cross_platform.py` — those are the four
+things that pass locally and fail on Windows.
 
 If you change a dependency in `pyproject.toml`, commit the updated `uv.lock`
 alongside it or `uv sync --locked` fails in CI.

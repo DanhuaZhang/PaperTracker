@@ -54,7 +54,8 @@ seen_papers_file = "state/seen.json"
 summary_cache_file = "state/summary_cache.json"
 summary_timeout_sec = 180
 
-# Zotero integration.
+# Zotero integration. "~/Zotero" is Zotero's default on macOS, Linux, and
+# Windows alike (it expands to C:\Users\<you>\Zotero there).
 zotero_data_dir = "~/Zotero"
 zotero_linked_base = ""
 

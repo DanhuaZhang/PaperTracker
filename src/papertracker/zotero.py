@@ -34,7 +34,10 @@ def _copy_db(data_dir: Path):
     tmp_db = Path(tmp.name) / "zotero.sqlite"
     try:
         shutil.copy2(db, tmp_db)
-        con = sqlite3.connect(f"file:{tmp_db}?mode=ro", uri=True)
+        # as_uri() rather than interpolation: a Windows temp path carries a drive
+        # letter, backslashes, and often a space in the user name, none of which
+        # survive being pasted into a URI raw.
+        con = sqlite3.connect(f"{tmp_db.as_uri()}?mode=ro", uri=True)
     except (OSError, sqlite3.Error) as e:
         tmp.cleanup()
         log.warning("Could not open Zotero DB: %s", e)

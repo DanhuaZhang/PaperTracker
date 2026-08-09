@@ -9,7 +9,14 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # PaperTracker is developed on macOS but is meant to run anywhere uv does.
+    # Windows is in the matrix because its failures are the ones that never
+    # reproduce locally: path separators, cp1252 consoles, and CRLF checkouts.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       # astral-sh publishes moving major tags only up to v7; newer releases are

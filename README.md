@@ -52,6 +52,7 @@ threshold — writing one markdown file per topic per day.
 - [Privacy and data flow](#privacy-and-data-flow)
 - [Run it daily](#run-it-daily)
 - [Troubleshooting](#troubleshooting)
+- [Windows notes](#windows-notes)
 - [Development](#development)
 - [License](#license)
 
@@ -61,21 +62,39 @@ threshold — writing one markdown file per topic per day.
 
 | | |
 |---|---|
-| OS | macOS or Linux |
+| OS | macOS, Linux, or Windows 10/11 |
 | `git` | to clone |
 | [`uv`](https://docs.astral.sh/uv/) | provisions Python 3.12 and all dependencies |
 | Claude Code **or** Codex CLI | required only when you ask for summaries |
 
 Everything else, including Python itself, is installed by `uv sync`.
 
+Every platform runs the same test suite in CI. Where the three differ, this
+README shows a **Windows (PowerShell)** block next to the macOS/Linux one — the
+only real differences are how you install things and how you set an environment
+variable. See [Windows notes](#windows-notes) for the details worth knowing.
+
 ## Setup, from zero
 
 ### 1. Install uv
+
+**macOS / Linux**
 
 ```bash
 brew install uv                                  # macOS
 curl -LsSf https://astral.sh/uv/install.sh | sh  # Linux / macOS
 ```
+
+**Windows (PowerShell)**
+
+```powershell
+winget install --id=astral-sh.uv -e
+# or, without winget:
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Close and reopen the terminal afterwards so `uv` is on `PATH`, then check with
+`uv --version`.
 
 ### 2. Clone and install
 
@@ -95,6 +114,8 @@ and installs the `papertracker` command into that environment.
 Pick at least one if you want summaries. Either CLI can use an eligible
 subscription; API-key authentication may instead incur usage-based billing.
 
+**macOS / Linux**
+
 ```bash
 # Claude Code
 #   install: https://claude.com/code
@@ -105,15 +126,37 @@ curl -fsSL https://chatgpt.com/codex/install.sh | sh
 codex login
 ```
 
+**Windows (PowerShell)**
+
+```powershell
+# Claude Code — see https://claude.com/code for the current installer
+claude auth login
+
+# Codex CLI
+npm install -g @openai/codex
+codex login
+```
+
 Authentication options and plan availability can change; use the official
 [Claude Code setup guide](https://docs.anthropic.com/en/docs/claude-code/getting-started)
 or [Codex CLI and authentication guides](https://learn.chatgpt.com/docs/codex/cli).
+
+Whichever way you install, PaperTracker only needs `claude` or `codex` to be
+findable on `PATH` — verify with `claude --version` in the same terminal you
+will run PaperTracker from. On Windows an npm-installed CLI lands as a `.cmd`
+shim; PaperTracker resolves it to its full path before spawning it, so the shim
+works without `shell=True`.
 
 Do not edit the tracked `config.toml` just to choose a provider. Set a
 personal default in your shell instead:
 
 ```bash
-export PAPERTRACKER_PROVIDER=codex  # or claude
+export PAPERTRACKER_PROVIDER=codex           # macOS / Linux
+```
+
+```powershell
+$env:PAPERTRACKER_PROVIDER = "codex"         # Windows, this session only
+setx PAPERTRACKER_PROVIDER codex             # Windows, persists (new terminals)
 ```
 
 ### 4. Create your topics file
@@ -427,13 +470,19 @@ There is **no `.env` support** — nothing in the code loads one. Export these
 from your shell profile (`~/.zshrc`, `~/.bashrc`) for persistence, or prefix a
 single command (`PAPERTRACKER_EMAIL=you@example.com uv run papertracker`).
 
+On Windows, `$env:PAPERTRACKER_EMAIL = "you@example.com"` sets one for the
+current PowerShell session and `setx PAPERTRACKER_EMAIL you@example.com` persists
+it for terminals opened afterwards — `setx` does not affect the session you run
+it in. PowerShell has no `VAR=value command` prefix form; set the variable on its
+own line first.
+
 The "If unset" column names the exact file and key each variable falls back to.
 Variables marked **env-only** have no config-file equivalent — the environment
 is the only place to set them.
 
 | Variable | Purpose | If unset, falls back to |
 |---|---|---|
-| `PAPERTRACKER_USER_DATA_DIR` | Where topics, digests, state, and caches live | **env-only** — `<repo>/user_data` in a checkout; `$XDG_DATA_HOME/papertracker` or `~/.local/share/papertracker` when installed |
+| `PAPERTRACKER_USER_DATA_DIR` | Where topics, digests, state, and caches live | **env-only** — `<repo>/user_data` |
 | `PAPERTRACKER_PROVIDER` | `claude` or `codex` | `provider` in `~/.config/papertracker/config.toml`, then `provider` in `config.toml` (ships as `claude`) |
 | `PAPERTRACKER_MODEL` | Model for the selected provider | `claude_model` / `codex_model` in `~/.config/papertracker/config.toml`, then in `config.toml` (`sonnet` / `gpt-5.6-luna`) |
 | `PAPERTRACKER_EFFORT` | Thinking effort per summary, for either provider | `reasoning_effort` in `~/.config/papertracker/config.toml`, then in `config.toml` (ships as `medium`) |
@@ -743,6 +792,20 @@ replace every `/absolute/path/PaperTracker` below with the real checkout path:
 0 8 * * * cd /absolute/path/PaperTracker && /absolute/path/PaperTracker/.venv/bin/papertracker >> /absolute/path/PaperTracker/user_data/papertracker.log 2>&1
 ```
 
+On Windows, use Task Scheduler. Register a daily task pointing at the console
+script inside the checkout's virtualenv — note `Scripts\` and `.exe`, where
+POSIX has `bin/` and no extension:
+
+```powershell
+$repo = "C:\path\to\PaperTracker"
+$action  = New-ScheduledTaskAction -Execute "$repo\.venv\Scripts\papertracker.exe" -WorkingDirectory $repo
+$trigger = New-ScheduledTaskTrigger -Daily -At 8am
+Register-ScheduledTask -TaskName PaperTracker -Action $action -Trigger $trigger
+```
+
+Task Scheduler captures no output of its own; add `-Argument "-v"` and redirect
+from a wrapper `.cmd` if you want a log.
+
 Run the command manually first. A scheduled shell must have the AI CLI on its
 `PATH` and access to the same non-interactive authentication as your terminal.
 Avoid `--select` in unattended jobs. PaperTracker exits nonzero if a paper source
@@ -762,6 +825,37 @@ successful summaries are retained and failures are retried next time.
 | Log says `capped at 1500 of N total` | Raise `max_results_per_query` in `config.toml` or pass `--max-results`. Scoring is local, so the cost here is HTTP traffic and time. |
 | Re-summarize a paper you already saw | `--ignore-seen`, or delete `user_data/state/<project-id>/seen.json`. |
 | Inspect matches without spending quota | `--no-summarize`, which sorts by relevance score. |
+| Windows: `uv` not recognized | Reopen the terminal after installing, so `PATH` is re-read. |
+| Windows: `running scripts is disabled on this system` | PowerShell's execution policy blocked the uv installer. Use the `winget` line instead, or run the installer exactly as written — its `-ExecutionPolicy ByPass` applies to that one command only. |
+| Windows: writing the digest fails with a permission error | The target `.md` is open in another program (Obsidian, Word). Windows locks open files against replacement; close it and rerun. |
+
+## Windows notes
+
+Everything works the same; these are the differences worth knowing.
+
+**Paths.** `~` resolves to `C:\Users\<you>`, so the defaults land where you would
+expect: your personal config at `C:\Users\<you>\.config\papertracker\config.toml`
+and Zotero at `C:\Users\<you>\Zotero` — which is Zotero's own Windows default, so
+`zotero_data_dir` usually needs no change. Everything machine-local still lives
+in `user_data\` inside the checkout.
+
+**Long paths.** Digest filenames are short, but a deep checkout plus the
+`fastembed` model cache can approach the legacy 260-character limit. If you see
+errors mentioning a path length, either clone nearer the drive root (`C:\src\`)
+or [enable long paths](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation).
+
+**Console encoding.** PaperTracker forces UTF-8 on its own output, so
+`uv run papertracker > digest.txt` keeps accented author names and the ★ badge
+intact rather than failing on the code page.
+
+**Terminal colors.** The relevance listing uses ANSI color when stdout is a
+terminal. Windows Terminal renders it correctly; the legacy `conhost` console
+shows escape sequences as literal text. Redirecting to a file drops the color
+either way.
+
+**What is not supported anywhere**, Windows included: `uv tool install`. Run
+`uv run papertracker` from inside the checkout — see
+[PaperTracker runs from a checkout](#papertracker-runs-from-a-checkout).
 
 ## Development
 
@@ -774,9 +868,15 @@ uv run ruff check src tests      # lint
 uv build                         # the wheel/sdist build must succeed
 ```
 
-`.github/workflows/ci.yml` runs exactly those three plus `uv sync --locked`, so
-a green local run means a green CI run. Tests are offline and stub every HTTP
-call — nothing in the suite touches arXiv, Crossref, HuggingFace, or an AI CLI.
+`.github/workflows/ci.yml` runs exactly those three plus `uv sync --locked`, on
+Ubuntu, macOS, and Windows. A green local run means a green CI run on your own
+platform; the matrix is what catches the rest. Tests are offline and stub every
+HTTP call — nothing in the suite touches arXiv, Crossref, HuggingFace, or an AI
+CLI.
+
+`tests/test_cross_platform.py` holds the cases that only fail off macOS —
+executable resolution, SQLite URIs, console encoding, line endings. If you touch
+how a subprocess is spawned or a path becomes a URI, that is the file to extend.
 
 `config.toml` and `summary_templates/` are each a single tracked copy that the
 code reads directly, so editing them needs no follow-up sync step.
