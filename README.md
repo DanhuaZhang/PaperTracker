@@ -27,7 +27,7 @@ threshold — writing one markdown file per topic per day.
 <ul>
   <li><a href="#prerequisites">Prerequisites</a></li>
   <li>
-    <details>
+    <details open>
       <summary><a href="#setup-from-zero">Setup, from zero</a></summary>
       <ul>
         <li><a href="#1-install-uv">1. Install uv</a></li>
@@ -41,7 +41,7 @@ threshold — writing one markdown file per topic per day.
   </li>
   <li><a href="#credentials--where-to-get-them">Credentials — where to get them</a></li>
   <li>
-    <details>
+    <details open>
       <summary><a href="#run">Run</a></summary>
       <ul>
         <li><a href="#all-cli-flags">All CLI flags</a></li>
@@ -50,7 +50,7 @@ threshold — writing one markdown file per topic per day.
   </li>
   <li><a href="#where-your-data-lives">Where your data lives</a></li>
   <li>
-    <details>
+    <details open>
       <summary><a href="#configuration">Configuration</a></summary>
       <ul>
         <li><a href="#papertracker-runs-from-a-checkout">PaperTracker runs from a checkout</a></li>
@@ -63,7 +63,7 @@ threshold — writing one markdown file per topic per day.
   </li>
   <li><a href="#relevance-filter">Relevance filter</a></li>
   <li>
-    <details>
+    <details open>
       <summary><a href="#summary-templates">Summary templates</a></summary>
       <ul>
         <li><a href="#how---select-presents-the-choice">How --select presents the choice</a></li>
@@ -72,7 +72,7 @@ threshold — writing one markdown file per topic per day.
   </li>
   <li><a href="#zotero-pdf-batch-mode">Zotero PDF batch mode</a></li>
   <li>
-    <details>
+    <details open>
       <summary><a href="#related-work-mode">Related-work mode</a></summary>
       <ul>
         <li><a href="#two-ranking-modes">Two ranking modes</a></li>

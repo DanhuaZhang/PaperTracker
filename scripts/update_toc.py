@@ -89,7 +89,14 @@ def build_toc(lines: list[str]) -> list[str]:
         if not children:
             out.append(f"  <li>{link}</li>")
             continue
-        out += ["  <li>", "    <details>", f"      <summary>{link}</summary>", "      <ul>"]
+        # `open` so subsections are visible on load and findable by Ctrl-F;
+        # collapsed content is invisible to in-page search until expanded.
+        out += [
+            "  <li>",
+            "    <details open>",
+            f"      <summary>{link}</summary>",
+            "      <ul>",
+        ]
         out += [
             f'        <li><a href="#{a}">{_esc(t)}</a></li>' for t, a in children
         ]
