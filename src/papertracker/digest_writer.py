@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 import json
+import os
 from pathlib import Path
+import re
+import tempfile
 
 from . import config, related_work
 
@@ -34,7 +37,7 @@ def render_digest(
         else:
             by_section["Other ACM / IEEE"].append((paper, summary))
 
-    profile_name = profile.name if profile else "multi-modal embodied agents in 3D/XR/AR/VR"
+    profile_name = profile.name if profile else "your research topics"
     lines = [
         f"# PaperTracker Daily Digest — {profile_name} — {date_str}",
         "",
@@ -172,7 +175,7 @@ def save_faceted_related_work(
     out_dir.mkdir(parents=True, exist_ok=True)
     md_path = out_dir / f"{date_str}.facets.md"
     json_path = out_dir / f"{date_str}.facets.json"
-    md_path.write_text(markdown, encoding="utf-8")
+    _atomic_write_text(md_path, markdown)
     payload = {
         "date": date_str,
         "project": {
@@ -185,16 +188,126 @@ def save_faceted_related_work(
         "suggested_section_order": [facet.name for facet in facets],
         "candidates": [related_work.candidate_to_jsonable(paper) for paper in candidates],
     }
-    json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _atomic_write_text(
+        json_path,
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+    )
     return md_path, json_path
+
+
+_DAILY_COUNT_RE = re.compile(
+    r"(?m)^> Auto-generated\. (?P<count>\d+) paper\(s\) matched this project\.$"
+)
+_SECTION_RE = re.compile(r"(?m)^## (?P<heading>[^\n]+)\n")
+
+
+def save_daily_digest(
+    date_str: str,
+    content: str,
+    digest_dir: str,
+    *,
+    new_paper_count: int,
+) -> Path:
+    """Write a daily digest without discarding results from an earlier same-day run."""
+    out_dir = Path(digest_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{date_str}.md"
+    if path.exists():
+        if new_paper_count == 0:
+            return path
+        try:
+            existing = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            existing = ""
+        if existing:
+            content = merge_daily_digests(existing, content)
+    _atomic_write_text(path, content)
+    return path
+
+
+def merge_daily_digests(existing: str, update: str) -> str:
+    """Merge new source sections into an existing generated daily digest."""
+    if "No new papers matched the filter criteria today." in existing:
+        return update
+
+    old_match = _DAILY_COUNT_RE.search(existing)
+    new_match = _DAILY_COUNT_RE.search(update)
+    if old_match is None or new_match is None:
+        body = _daily_sections(update)
+        return existing.rstrip() + "\n\n---\n\n## Later update\n\n" + body.rstrip() + "\n"
+
+    merged_count = int(old_match.group("count")) + int(new_match.group("count"))
+    merged = _DAILY_COUNT_RE.sub(
+        f"> Auto-generated. {merged_count} paper(s) matched this project.",
+        existing,
+        count=1,
+    )
+    prefix, sections = _split_sections(merged)
+    _new_prefix, new_sections = _split_sections(update)
+    section_index = {heading: index for index, (heading, _body) in enumerate(sections)}
+    for heading, body in new_sections:
+        if heading in section_index:
+            index = section_index[heading]
+            old_heading, old_body = sections[index]
+            sections[index] = (old_heading, old_body.rstrip() + "\n\n" + body.lstrip())
+        else:
+            section_index[heading] = len(sections)
+            sections.append((heading, body))
+    rendered = prefix.rstrip() + "\n\n"
+    rendered += "\n\n".join(
+        f"## {heading}\n{body.strip()}" for heading, body in sections
+    )
+    return rendered.rstrip() + "\n"
+
+
+def _split_sections(content: str) -> tuple[str, list[tuple[str, str]]]:
+    matches = list(_SECTION_RE.finditer(content))
+    if not matches:
+        return content, []
+    prefix = content[:matches[0].start()]
+    sections: list[tuple[str, str]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
+        sections.append((match.group("heading"), content[match.end():end]))
+    return prefix, sections
+
+
+def _daily_sections(content: str) -> str:
+    _prefix, sections = _split_sections(content)
+    if not sections:
+        return content
+    return "\n\n".join(f"## {heading}\n{body.strip()}" for heading, body in sections)
 
 
 def save_digest(date_str: str, content: str, digest_dir: str) -> Path:
     out_dir = Path(digest_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{date_str}.md"
-    path.write_text(content, encoding="utf-8")
+    _atomic_write_text(path, content)
     return path
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Atomically replace a UTF-8 text file in its destination directory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary_path = Path(handle.name)
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
 
 
 def _render_facet_row(paper: dict) -> str:

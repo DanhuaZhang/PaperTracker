@@ -11,7 +11,7 @@ The main source files are:
 - `src/papertracker/cli.py`
 - `src/papertracker/related_work.py`
 - `papertracker.toml`
-- `projects.toml`
+- `user_data/projects.toml`
 
 ## 1. The Big Idea
 
@@ -60,7 +60,7 @@ understand rooms, objects, and user gestures in augmented reality...
 That string is passed to the embedding model.
 
 The project topic statement comes from the active project profile in
-`projects.toml`. If a profile does not override a field, defaults can come from
+`user_data/projects.toml`. If a profile does not override a field, defaults can come from
 `papertracker.toml`.
 
 For example, the default project topic is a long description of multimodal
@@ -1088,42 +1088,36 @@ to hybrid scoring.
 ## 29. Using Zotero PDFs for Parsing and Analysis
 
 The relevance scoring described above uses paper metadata: title, abstract,
-citations, and discovery source. The deeper paper analysis step can use the full
-PDF, but only when that PDF is already stored in your local Zotero library.
+citations, and discovery source. Zotero collection mode is a separate workflow
+for deeper analysis of PDFs already stored in your local Zotero library.
 
 The workflow is:
 
 ```text
-fetched paper metadata
--> match paper to Zotero item
--> resolve local PDF attachment path
--> ask Claude to read that PDF
--> write triage or deep analysis into the digest
+Zotero collection path
+-> enumerate PDF-backed items in that collection
+-> resolve each local PDF attachment path
+-> extract and chunk text locally
+-> fill the selected Markdown summary template through Claude or Codex
 ```
 
-PaperTracker itself does not extract PDF text into an intermediate file. Instead,
-it finds the PDF path and, for the `claude` provider, runs Claude with permission
-to read that local file.
+PaperTracker extracts text in memory with `pypdf`; it does not create an
+intermediate text file or grant the AI CLI filesystem tools.
 
 ### 29.1. Put the Paper in Zotero First
 
 Before asking PaperTracker for full-text analysis, add the paper and its PDF to
 Zotero.
 
-The most reliable path is:
+The reliable path is:
 
 1. Add the paper to Zotero with DOI metadata.
 2. Attach the PDF to that Zotero item.
-3. Run PaperTracker after the Zotero item exists locally.
+3. Put the item in the collection you will pass to `--zotero-collection`.
+4. Run PaperTracker after Zotero has synced the attachment locally.
 
-PaperTracker matches the fetched paper to Zotero in this order:
-
-1. DOI match.
-2. Normalized title match.
-
-DOI matching is preferred because titles can vary across sources. A title might
-include punctuation differences, subtitles, capitalization differences, or
-conference formatting that makes exact title matching harder.
+Collection mode reads metadata directly from the Zotero item and includes only
+items with a resolvable local PDF attachment.
 
 ### 29.2. Configure the Zotero Data Directory
 
@@ -1184,132 +1178,78 @@ Zotero's own database locks.
 
 ### 29.4. Run a Summary That Uses the PDF
 
-Full-text PDF reading currently works with the `claude` provider.
-
-Use a normal run:
-
-```bash
-uv run papertracker --provider claude
-```
-
-Or use interactive selection so you can choose which papers to analyze:
+Full-text PDF reading works with both supported providers in Zotero collection
+mode:
 
 ```bash
-uv run papertracker --provider claude --select
+uv run papertracker --zotero-collection "Reading/Deep Reading" --provider claude
+uv run papertracker --zotero-collection "Reading/Deep Reading" --provider codex
 ```
 
-In the selector, PaperTracker supports two summary modes:
+Use interactive selection to choose papers and templates:
 
-- `triage`: shorter relevance-oriented bullets.
-- `deep`: fills your Obsidian note template.
+```bash
+uv run papertracker --zotero-collection "Reading/Deep Reading" --select
+```
 
-In the headless text selector, a bare number means triage and a trailing `d`
-means deep:
+The selector shows every Markdown template in `user_data/summary_templates/`.
+Templates declare one of two evidence types:
+
+- `abstract`: metadata and abstract only.
+- `fulltext`: a readable local PDF is required.
+
+In the headless text selector, a bare paper number uses the default template.
+Append `:template-id` to choose another:
 
 ```text
-1, 3d
+1, 3:deep-human-study
 ```
 
-That means:
+### 29.5. What the AI Provider Receives
 
-```text
-paper 1 -> triage
-paper 3 -> deep
-```
-
-Both modes try to use the Zotero PDF when the provider is `claude`.
-
-### 29.5. What Claude Receives
-
-When a PDF is found, PaperTracker builds a prompt that begins with:
-
-```text
-Read the full paper PDF at this path and base your answer on it:
-<local pdf path>
-```
-
-Then it runs Claude with:
-
-```text
---allowedTools Read
---add-dir <directory containing the PDF>
-```
-
-That gives Claude permission to read the specific local directory containing the
-PDF. The analysis is then based on the full paper rather than only the abstract.
+PaperTracker opens the PDF locally with `pypdf`, preserves page labels, and
+extracts every page that contains text. It sends the extracted text to the
+selected CLI in bounded chunks. It does not give either CLI filesystem tools and
+does not ask the provider to open the local PDF path.
 
 This is the "PDF parse and analysis" path in the current implementation:
 
 ```text
 PaperTracker resolves the PDF path.
-Claude reads/parses the PDF content through its Read tool.
-Claude writes the requested triage or deep analysis.
+PaperTracker extracts and chunks text locally.
+The selected AI provider creates bounded notes and fills the chosen template.
 PaperTracker stores the result in the digest and summary cache.
 ```
 
 ### 29.6. What Happens If No PDF Is Found
 
-If PaperTracker cannot find a Zotero PDF, it falls back to the title and
-abstract.
+Zotero collection mode includes only PDF-backed items. A missing PDF, unreadable
+file, or image-only document fails the full-text summary instead of silently
+falling back to an abstract. An image-only document reports that OCR is required.
 
-For Claude summaries, the digest is marked with:
+Common reasons an expected item is not included or cannot be summarized:
 
-```text
-Abstract-based (no Zotero PDF found).
-```
-
-This means the analysis did not use the full paper. It used only metadata and
-the abstract.
-
-Common reasons a PDF is not found:
-
-- The paper is not in Zotero.
+- The paper is not in the requested Zotero collection.
 - The Zotero item has no attached PDF.
-- The DOI in Zotero differs from the DOI in the fetched source.
-- The fetched source has no DOI and the title does not exactly normalize to the
-  Zotero title.
 - `PAPERTRACKER_ZOTERO_DIR` points to the wrong Zotero data directory.
 - Linked attachments are used, but `zotero_linked_base` is not configured.
+- The PDF is unreadable, encrypted, or contains only scanned images.
 
-### 29.7. Provider Limitation
+### 29.7. Quick Verification
 
-The current full-text PDF path is implemented for:
+To verify Zotero collection mode for a real run:
 
-```text
-provider = "claude"
-```
-
-With:
-
-```text
-provider = "codex"
-```
-
-PaperTracker currently falls back to abstract-based prompting because the Codex
-subprocess path is run read-only and does not have the same PDF `Read` tool
-integration in this codebase.
-
-### 29.8. Quick Verification
-
-To verify that Zotero lookup works for a real run:
-
-1. Pick a paper that appears in PaperTracker output.
-2. Make sure the same paper exists in Zotero with an attached PDF.
-3. Prefer a Zotero item with a DOI.
-4. Run:
+1. Put an item with a locally available PDF into a Zotero collection.
+2. Find the exact collection path with `--list-zotero-collections`.
+3. Run the collection with verbose logging:
 
 ```bash
-uv run papertracker --provider claude --select -v
+uv run papertracker --list-zotero-collections
+uv run papertracker --zotero-collection "Reading/Deep Reading" --provider codex -v
 ```
 
-Select that paper. In verbose logs, PaperTracker should not report:
-
-```text
-No Zotero PDF
-```
-
-The resulting digest should also not show the abstract-based fallback note for
-that paper.
+The logs report the number of extractable pages and chunks. The resulting digest
+marks the evidence as full text.
 
 ## 30. Summary
 

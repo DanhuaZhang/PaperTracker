@@ -1,60 +1,99 @@
 # PaperTracker project profiles — EXAMPLE / TEMPLATE.
 #
-# Copy this file to `projects.toml` (which is gitignored) and edit it for your
-# own research topics:
+# Copy this file into the gitignored user_data folder and edit it:
 #
-#     cp projects.example.toml projects.toml
+#     cp projects.example.toml user_data/projects.toml
+#
+# A "project" is one research topic you want tracked. Each gets its own digest
+# folder, its own seen-papers list, and its own summary cache, so one topic never
+# hides papers from another.
 #
 # Global runtime defaults (provider, sources, thresholds, output paths, Zotero,
-# summary templates) stay in `papertracker.toml`. Any field a profile omits
-# falls back to that file. Without a `projects.toml`, PaperTracker runs a single
-# legacy profile built entirely from `papertracker.toml`.
+# summary templates) live in `papertracker.toml`. Any field a profile omits falls
+# back to that file. Without a user_data/projects.toml, PaperTracker runs a single
+# placeholder profile built entirely from papertracker.toml.
 
 # Which profile runs when you don't pass --project. Must match a profile `id`.
-default_project = "xr-agents"
+default_project = "my-topic"
 
 [[projects]]
-# `id`: lowercase slug, [a-z0-9][a-z0-9_-]*. Names the digest/state folders,
-# e.g. digests/<id>/ and .papertracker/<id>/.
-id = "xr-agents"
-name = "XR embodied agents"
+# `id`: lowercase slug, [a-z0-9][a-z0-9_-]*. Names the output folders, e.g.
+# user_data/digests/<id>/ and user_data/state/<id>/.
+id = "my-topic"
+name = "My research topic"
 
 # `topic_statement`: the text embedded and compared (cosine similarity) against
-# each paper's title+abstract by the local relevance scorer. Longer and more
-# specific = sharper discrimination.
+# each paper's title+abstract by the local relevance scorer. This is the single
+# most important field — longer and more specific means sharper discrimination.
+# Write a paragraph, not a keyword list.
 topic_statement = """
-Multi-modal embodied agents perceiving, reasoning about, and acting within 3D environments - including extended reality (XR), augmented reality (AR), and virtual reality (VR). Relevant topics include vision-language models for embodied AI, 3D scene understanding, spatial reasoning over rooms and scenes, immersive interaction and mixed-reality interfaces, simulated agents in virtual worlds, embodied question answering, and gaze/gesture interaction in XR.
+Describe the research you want to follow: the problems, methods, and settings
+that matter to you, and the kinds of results you would want to read. Mention the
+subfields, techniques, and application domains by name. Two to five sentences
+works well.
+"""
+
+# Optional: describe what your own work contributes. Faceted related-work mode
+# uses this to explain how candidates differ from your contribution.
+contribution_statement = """
+Describe the method, system, dataset, result, or claim that distinguishes your
+work. Leave this empty if you only want comparison against the topic statement.
 """
 
 # `crossref_query_hint`: a loose keyword string passed to CrossRef and OpenAlex
-# as a ranking hint (not a hard filter).
-crossref_query_hint = "embodied agent multimodal 3D XR VR AR spatial scene understanding interaction avatar"
+# as a ranking hint (not a hard filter — the embedding scorer does the filtering).
+crossref_query_hint = "keywords describing your topic"
 
 # `arxiv_categories`: arXiv subject categories to query.
-arxiv_categories = ["cs.CV", "cs.RO", "cs.AI", "cs.HC", "cs.GR"]
+# Full list: https://arxiv.org/category_taxonomy
+arxiv_categories = ["cs.AI", "cs.LG"]
 
 # `relevance_threshold`: papers scoring at/above this (0..1) pass to the
 # summarizer. Higher = stricter. Omit to inherit papertracker.toml.
+# Tune it with: uv run papertracker --no-summarize --threshold -1 --days 14
 relevance_threshold = 0.65
 
 # Optional: facets group related-work candidates when you run
 # `--related-work --facets`. Remove this block if you don't use faceted mode.
 [[projects.related_work_facets]]
-id = "scene-understanding"
-name = "3D scene understanding"
-description = "Perceiving and representing 3D scenes for embodied agents."
-query_hint = "3D scene understanding embodied perception"
+id = "methods"
+name = "Methods"
+description = "Core techniques and model architectures in this area."
+query_hint = "methods architectures"
 
 [[projects.related_work_facets]]
-id = "spatial-interaction"
-name = "Immersive interaction"
-description = "Interaction techniques and interfaces in AR/VR/MR."
-query_hint = "immersive interaction mixed reality interface"
+id = "evaluation"
+name = "Evaluation"
+description = "Benchmarks, datasets, and evaluation protocols."
+query_hint = "benchmark dataset evaluation"
 
-# Add more profiles by repeating the [[projects]] block with a new `id`.
+# Add more topics by repeating the [[projects]] block with a new `id`.
 # [[projects]]
 # id = "another-topic"
 # name = "Another topic"
 # topic_statement = """..."""
 # crossref_query_hint = "..."
-# arxiv_categories = ["cs.AI"]
+# arxiv_categories = ["cs.CL"]
+
+# Venues to badge with ★ in the digest, poll by RSS, and optionally restrict
+# output to via --priority-venues-only. Defined once here at the top level, every
+# profile above inherits them; set `priority_venues` inside a [[projects]] block
+# to override for that one topic. `patterns` are case-insensitive substrings
+# matched against the CrossRef container title.
+[[priority_venues]]
+name = "NeurIPS"
+publisher = "acm"
+patterns = ["Neural Information Processing Systems", "NeurIPS"]
+
+[[priority_venues]]
+name = "ACM CHI"
+publisher = "acm"
+patterns = ["CHI Conference on Human Factors", "CHI '"]
+
+# Add `rss = "..."` to also poll a journal's RSS feed, which often lands 1–2 days
+# before the CrossRef deposit:
+# [[priority_venues]]
+# name = "IEEE TVCG"
+# publisher = "ieee"
+# patterns = ["Transactions on Visualization and Computer Graphics"]
+# rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"

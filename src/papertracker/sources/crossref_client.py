@@ -53,8 +53,6 @@ def search(
     )
 
     items = _fetch_all_items(filter_str, cap, source_label, profile)
-    if items is None:
-        return []
 
     out: list[dict] = []
     dropped_no_abstract = 0
@@ -118,8 +116,8 @@ def _fetch_all_items(
     cap: int,
     source_label: str,
     profile: config.ProjectProfile | None = None,
-) -> list[dict] | None:
-    """Paginate CrossRef up to `cap` results. Returns None on hard error."""
+) -> list[dict]:
+    """Paginate CrossRef up to ``cap`` results, raising on an incomplete fetch."""
     headers = {"User-Agent": config.USER_AGENT}
     items: list[dict] = []
     offset = 0
@@ -143,7 +141,7 @@ def _fetch_all_items(
             data = _get_with_retry(params, headers, source_label, offset)
         except (requests.RequestException, ValueError) as e:
             log.error("CrossRef[%s] failed (offset=%d): %s", source_label, offset, e)
-            return None if not items else items
+            raise
 
         msg = data.get("message", {})
         page_items = msg.get("items", []) or []

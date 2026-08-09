@@ -242,7 +242,7 @@ def _paper_from_item(con: sqlite3.Connection, item_id: int, data_dir: Path) -> d
         "venue": None,
         "title": title,
         "abstract": fields.get("abstractNote") or "",
-        "authors": [],
+        "authors": _item_creators(con, item_id),
         "published": fields.get("date") or "",
         "url": url,
         "doi": doi,
@@ -263,6 +263,38 @@ def _item_fields(con: sqlite3.Connection, item_id: int) -> dict[str, str]:
         (item_id,),
     ).fetchall()
     return {field: value for field, value in rows}
+
+
+def _item_creators(con: sqlite3.Connection, item_id: int) -> list[str]:
+    """Load Zotero authors in their stored order, including corporate authors."""
+    try:
+        rows = con.execute(
+            """
+            SELECT c.firstName, c.lastName, c.fieldMode, ct.creatorType
+            FROM itemCreators ic
+            JOIN creators c ON c.creatorID = ic.creatorID
+            LEFT JOIN creatorTypes ct ON ct.creatorTypeID = ic.creatorTypeID
+            WHERE ic.itemID = ?
+            ORDER BY ic.orderIndex
+            """,
+            (item_id,),
+        ).fetchall()
+    except sqlite3.Error:
+        # Older/minimal Zotero-compatible databases may omit creator tables.
+        return []
+    authors = []
+    for first_name, last_name, field_mode, creator_type in rows:
+        if creator_type and creator_type != "author":
+            continue
+        first = (first_name or "").strip()
+        last = (last_name or "").strip()
+        if field_mode or not first:
+            name = last
+        else:
+            name = " ".join(part for part in (first, last) if part)
+        if name:
+            authors.append(name)
+    return authors
 
 
 def _match_item(con: sqlite3.Connection, paper: dict) -> int | None:

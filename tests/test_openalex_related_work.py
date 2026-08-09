@@ -1,3 +1,5 @@
+import pytest
+
 from papertracker import config
 from papertracker.related_work import RelatedWorkFacet
 from papertracker.sources import openalex_client
@@ -135,3 +137,17 @@ def test_fetch_works_adds_openalex_auth_params(monkeypatch):
     assert params["select"]
     assert headers["User-Agent"] == config.USER_AGENT
     assert timeout == 30
+
+
+def test_fetch_works_raises_when_openalex_is_unavailable(monkeypatch):
+    class Response:
+        status_code = 500
+
+    monkeypatch.setattr(
+        openalex_client.requests,
+        "get",
+        lambda *args, **kwargs: Response(),
+    )
+
+    with pytest.raises(openalex_client.OpenAlexError, match="HTTP 500"):
+        openalex_client._fetch_works({"search": "agent"}, 5, "citation")

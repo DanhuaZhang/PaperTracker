@@ -26,7 +26,7 @@ def _args() -> argparse.Namespace:
     return argparse.Namespace(
         zotero_collection="Reading/Deep Reading",
         zotero_include_subcollections=False,
-        zotero_template="deep",
+        zotero_template="deep-technical",
         refresh_summaries=False,
         priority_venues_only=False,
         scorer=None,
@@ -52,7 +52,7 @@ def test_zotero_collection_batch_passes_explicit_pdf_path(monkeypatch, tmp_path)
         "doi": "",
         "container_title": "",
         "pdf_path": str(pdf),
-        "template": "deep",
+        "template": "deep-technical",
     }
     calls = []
 
@@ -67,7 +67,7 @@ def test_zotero_collection_batch_passes_explicit_pdf_path(monkeypatch, tmp_path)
 
     assert cli._run_zotero_collection_profile(profile, _args()) == 0
 
-    assert calls == [("deep", pdf)]
+    assert calls == [("deep-technical", pdf)]
     digest_path = (
         tmp_path
         / "digests"
@@ -151,7 +151,7 @@ def test_zotero_collection_batch_records_pdf_extraction_error(monkeypatch, tmp_p
         ),
     )
 
-    assert cli._run_zotero_collection_profile(profile, _args()) == 0
+    assert cli._run_zotero_collection_profile(profile, _args()) == 1
 
     digest_path = (
         tmp_path

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 import os
 import re
 import tomllib
@@ -10,32 +11,85 @@ from pathlib import Path
 
 from . import related_work
 
+log = logging.getLogger(__name__)
+
+PACKAGE_DIR = Path(__file__).resolve().parent
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_REPOSITORY_CONFIG_PATH = REPOSITORY_ROOT / "papertracker.toml"
+_IN_SOURCE_CHECKOUT = (
+    _REPOSITORY_CONFIG_PATH.is_file()
+    and (REPOSITORY_ROOT / "pyproject.toml").is_file()
+)
+ROOT = REPOSITORY_ROOT if _IN_SOURCE_CHECKOUT else PACKAGE_DIR
+BUNDLED_CONFIG_PATH = PACKAGE_DIR / "defaults.toml"
+BUNDLED_TEMPLATE_DIR = PACKAGE_DIR / "bundled_templates"
+
+
+class ConfigError(RuntimeError):
+    """Raised when a PaperTracker configuration value is invalid."""
+
+
+def _default_user_data_dir() -> Path:
+    if _IN_SOURCE_CHECKOUT:
+        return REPOSITORY_ROOT / "user_data"
+    data_home = os.environ.get("XDG_DATA_HOME", "").strip()
+    base = Path(data_home).expanduser() if data_home else Path.home() / ".local" / "share"
+    return base / "papertracker"
+
+# Everything machine-local — your topics, generated digests, run state, and the
+# downloaded embedding model — lives under one gitignored folder. Override with
+# PAPERTRACKER_USER_DATA_DIR to keep it outside the checkout.
+USER_DATA_DIR = Path(
+    os.environ.get("PAPERTRACKER_USER_DATA_DIR") or _default_user_data_dir()
+).expanduser()
+
 PROJECT_CONFIG_PATH = globals().get(
     "PROJECT_CONFIG_PATH",
-    Path(__file__).resolve().parents[2] / "papertracker.toml",
+    _REPOSITORY_CONFIG_PATH if _IN_SOURCE_CHECKOUT else BUNDLED_CONFIG_PATH,
 )
+
+def _default_projects_config_path() -> Path:
+    """Prefer user_data/projects.toml; tolerate the pre-user_data repo-root location."""
+    preferred = USER_DATA_DIR / "projects.toml"
+    if preferred.is_file():
+        return preferred
+    legacy = ROOT / "projects.toml"
+    if legacy.is_file():
+        log.warning(
+            "Reading project profiles from %s. Move it to %s — the repo-root location is deprecated.",
+            legacy,
+            preferred,
+        )
+        return legacy
+    return preferred
+
+
 PROJECTS_CONFIG_PATH = globals().get(
     "PROJECTS_CONFIG_PATH",
-    Path(__file__).resolve().parents[2] / "projects.toml",
+    _default_projects_config_path(),
 )
+
+
+def _user_path(relative: str | Path) -> str:
+    """Resolve a profile output path under USER_DATA_DIR unless already absolute."""
+    path = Path(relative).expanduser()
+    return str(path if path.is_absolute() else USER_DATA_DIR / path)
 
 
 def _load_project_config() -> dict:
     if not PROJECT_CONFIG_PATH.is_file():
-        return {}
+        raise ConfigError(f"Runtime configuration file not found: {PROJECT_CONFIG_PATH}")
     try:
         with PROJECT_CONFIG_PATH.open("rb") as f:
             return tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError):
-        return {}
+    except OSError as exc:
+        raise ConfigError(f"Could not read {PROJECT_CONFIG_PATH}: {exc}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"Invalid TOML in {PROJECT_CONFIG_PATH}: {exc}") from exc
 
 
 _PROJECT_CONFIG = _load_project_config()
 _PROJECTS_CONFIG: dict | None = None
-
-
-class ConfigError(RuntimeError):
-    """Raised when the project config file is missing a required setting."""
 
 
 def _cfg(key: str):
@@ -138,7 +192,11 @@ SUMMARY_CACHE_FILE = _cfg("summary_cache_file")
 SUMMARY_TIMEOUT_SEC = _cfg("summary_timeout_sec")
 ENABLED_SOURCES_DEFAULT = _cfg("enabled_sources_default")
 SUMMARY_TEMPLATE_DIR = _cfg("summary_template_dir")
-DEFAULT_SUMMARY_TEMPLATE = _cfg("default_summary_template")
+DEFAULT_ABSTRACT_TEMPLATE = _cfg("default_abstract_template")
+DEFAULT_FULLTEXT_TEMPLATE = _cfg("default_fulltext_template")
+# Kept as a read-only compatibility name for integrations that imported it. New
+# code must select the evidence-specific default explicitly.
+DEFAULT_SUMMARY_TEMPLATE = DEFAULT_ABSTRACT_TEMPLATE
 
 
 @dataclass(frozen=True)
@@ -173,6 +231,21 @@ def _profile_value(raw: dict, key: str, default):
     return raw[key] if key in raw else default
 
 
+def _projects_default(key: str, fallback):
+    """Top-level key in projects.toml, shared by every profile that omits it.
+
+    Lets personal settings (notably `priority_venues`) live once in
+    user_data/projects.toml instead of being repeated per profile or kept in the
+    tracked papertracker.toml.
+    """
+    global _PROJECTS_CONFIG
+    if _PROJECTS_CONFIG is None:
+        _PROJECTS_CONFIG = _load_projects_config()
+    if _PROJECTS_CONFIG and key in _PROJECTS_CONFIG:
+        return _PROJECTS_CONFIG[key]
+    return fallback
+
+
 def _optional_str(value) -> str | None:
     if value is None:
         return None
@@ -188,7 +261,7 @@ def _relevance_scorer(value) -> str:
 
 
 def _project_state_path(project_id: str, filename: str) -> str:
-    return str(Path(".papertracker") / project_id / filename)
+    return str(Path("state") / project_id / filename)
 
 
 def _profile_from_project(raw: dict) -> ProjectProfile:
@@ -225,16 +298,18 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
         enable_reranker=bool(_profile_value(raw, "enable_reranker", ENABLE_RERANKER)),
         reranker_model=str(_profile_value(raw, "reranker_model", RERANKER_MODEL)),
         reranker_top_k=int(_profile_value(raw, "reranker_top_k", RERANKER_TOP_K)),
-        priority_venues=list(_profile_value(raw, "priority_venues", PRIORITY_VENUES)),
+        priority_venues=list(
+            _profile_value(raw, "priority_venues", _projects_default("priority_venues", PRIORITY_VENUES))
+        ),
         priority_venue_only=bool(_profile_value(raw, "priority_venue_only", PRIORITY_VENUE_ONLY)),
         enabled_sources_default=list(
             _profile_value(raw, "enabled_sources_default", ENABLED_SOURCES_DEFAULT)
         ),
-        digest_dir=str(_profile_value(raw, "digest_dir", Path(DIGEST_DIR) / project_id)),
-        seen_papers_file=str(
+        digest_dir=_user_path(_profile_value(raw, "digest_dir", Path(DIGEST_DIR) / project_id)),
+        seen_papers_file=_user_path(
             _profile_value(raw, "seen_papers_file", _project_state_path(project_id, "seen.json"))
         ),
-        summary_cache_file=str(
+        summary_cache_file=_user_path(
             _profile_value(
                 raw,
                 "summary_cache_file",
@@ -263,9 +338,9 @@ def legacy_profile() -> ProjectProfile:
         priority_venues=list(PRIORITY_VENUES),
         priority_venue_only=PRIORITY_VENUE_ONLY,
         enabled_sources_default=list(ENABLED_SOURCES_DEFAULT),
-        digest_dir=DIGEST_DIR,
-        seen_papers_file=SEEN_PAPERS_FILE,
-        summary_cache_file=SUMMARY_CACHE_FILE,
+        digest_dir=_user_path(DIGEST_DIR),
+        seen_papers_file=_user_path(SEEN_PAPERS_FILE),
+        summary_cache_file=_user_path(SUMMARY_CACHE_FILE),
         contribution_statement=None,
         related_work_facets=[],
     )
@@ -331,14 +406,41 @@ def zotero_linked_base_dir() -> Path | None:
 
 
 # --- Markdown summary templates -------------------------------------------
-def summary_template_catalog():
-    """Discover configured templates and return (all templates, default)."""
+def summary_template_directory() -> Path:
+    """Return the active user-owned template directory."""
+    directory = Path(SUMMARY_TEMPLATE_DIR).expanduser()
+    return directory if directory.is_absolute() else USER_DATA_DIR / directory
+
+
+def summary_template_catalog(default_evidence: str = "abstract"):
+    """Seed/discover templates and return (all templates, evidence default)."""
     from . import summary_templates
 
-    directory = Path(SUMMARY_TEMPLATE_DIR).expanduser()
-    if not directory.is_absolute():
-        directory = PROJECT_CONFIG_PATH.parent / directory
-    return summary_templates.discover(directory, DEFAULT_SUMMARY_TEMPLATE)
+    if default_evidence not in summary_templates.EVIDENCE_TYPES:
+        raise ConfigError(f"Unknown template evidence type {default_evidence!r}")
+    directory = summary_template_directory()
+    summary_templates.seed_if_empty(directory, BUNDLED_TEMPLATE_DIR)
+    templates, _ = summary_templates.discover(directory)
+    by_id = {template.id: template for template in templates}
+    defaults = {
+        "abstract": DEFAULT_ABSTRACT_TEMPLATE,
+        "fulltext": DEFAULT_FULLTEXT_TEMPLATE,
+    }
+    resolved = {}
+    for evidence, template_id in defaults.items():
+        template = by_id.get(template_id)
+        if template is None:
+            raise ConfigError(
+                f"Configured default {evidence} summary template {template_id!r} "
+                f"was not found in {directory}"
+            )
+        if template.evidence != evidence:
+            raise ConfigError(
+                f"Configured default {evidence} summary template {template_id!r} at "
+                f"{template.path} requires {template.evidence} evidence"
+            )
+        resolved[evidence] = template
+    return templates, resolved[default_evidence]
 
 
 def summary_template(template_id: str):

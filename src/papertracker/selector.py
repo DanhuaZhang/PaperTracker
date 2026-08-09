@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import html
 import http.server
+from pathlib import Path
 import sys
 import webbrowser
 from urllib.parse import parse_qs
+
+from . import summary_templates
 
 # ANSI palette for the text fallback — mirrors cli._print_paper_list.
 BOLD = "\033[1m"
@@ -61,7 +64,9 @@ def _meta(paper: dict) -> str:
 
 
 def select_papers(
-    papers: list[dict], template_ids: list[str], default_template: str
+    papers: list[dict],
+    templates: list[summary_templates.SummaryTemplate] | tuple[summary_templates.SummaryTemplate, ...],
+    default_template: str,
 ) -> list[dict]:
     """Return the subset the user picks, in relevance-sorted order."""
     if not papers:
@@ -69,11 +74,11 @@ def select_papers(
     ordered = _ordered(papers)
     if sys.stdin.isatty():
         try:
-            return _select_html(ordered, template_ids, default_template)
+            return _select_html(ordered, templates, default_template)
         except Exception as e:  # noqa: BLE001 — any UI failure degrades to text
             print(f"  (browser selector unavailable: {e}; falling back to text)")
-            return _select_fallback(ordered, template_ids, default_template)
-    return _select_fallback(ordered, template_ids, default_template)
+            return _select_fallback(ordered, templates, default_template)
+    return _select_fallback(ordered, templates, default_template)
 
 
 def select_related_work_candidates(papers: list[dict], facets: list) -> list[dict]:
@@ -97,12 +102,15 @@ def select_related_work_candidates(papers: list[dict], facets: list) -> list[dic
 def _selections_from_form(
     form: dict[str, list[str]],
     n: int,
-    template_ids: list[str],
+    templates,
     default_template: str,
+    papers: list[dict] | None = None,
 ) -> list[tuple[int, str]]:
     """Map a parsed POST form to sorted (index, template ID) pairs."""
     if "cancel" in form:
         return []
+    normalized = _template_objects(templates)
+    by_id = {template.id: template for template in normalized}
     out: list[tuple[int, str]] = []
     for v in form.get("sel", []):
         if not v.isdigit():
@@ -111,8 +119,14 @@ def _selections_from_form(
         if not (0 <= i < n):
             continue
         template_id = form.get(f"template_{i}", [default_template])[0].strip()
-        if template_id not in template_ids:
+        if template_id not in by_id:
             raise SelectionError(f"Unknown summary template {template_id!r}")
+        if papers is not None:
+            compatible, reason = _compatibility(by_id[template_id], papers[i])
+            if not compatible:
+                raise SelectionError(
+                    f"Template {template_id!r} is incompatible with paper {i + 1}: {reason}"
+                )
         out.append((i, template_id))
     return sorted(out)
 
@@ -120,7 +134,7 @@ def _selections_from_form(
 def _make_server(
     ordered: list[dict],
     page: str,
-    template_ids: list[str],
+    templates,
     default_template: str,
 ):
     """Build (but don't run) a localhost server. Returns (httpd, result).
@@ -155,7 +169,7 @@ def _make_server(
             form = parse_qs(self.rfile.read(length).decode("utf-8"))
             try:
                 result["selected"] = _selections_from_form(
-                    form, n, template_ids, default_template
+                    form, n, templates, default_template, ordered
                 )
             except SelectionError as exc:
                 self._send(html.escape(str(exc)), status=400)
@@ -234,10 +248,10 @@ def _make_related_server(ordered: list[dict], facets: list, page: str):
 
 
 def _select_html(
-    ordered: list[dict], template_ids: list[str], default_template: str
+    ordered: list[dict], templates, default_template: str
 ) -> list[dict]:
-    page = _render_html(ordered, template_ids, default_template)
-    httpd, result = _make_server(ordered, page, template_ids, default_template)
+    page = _render_html(ordered, templates, default_template)
+    httpd, result = _make_server(ordered, page, templates, default_template)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     print(f"  Opening paper selector in your browser: {url}")
     print("  Pick papers there and click “Summarize selected” (or Ctrl-C to cancel).")
@@ -300,7 +314,7 @@ main{max-width:900px;margin:0 auto;padding:18px 20px 60px;display:flex;flex-dire
 .card:has(input:checked){border-color:#2ea043;background:#0f2419}
 .card input{margin-top:3px;width:18px;height:18px;flex:none;cursor:pointer}
 .pick{display:flex;flex-direction:column;gap:6px;align-items:center;flex:none}
-.select-control{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:5px;font:inherit;font-size:12px;padding:2px 4px;cursor:pointer}
+.select-control{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:5px;font:inherit;font-size:12px;padding:4px 6px;cursor:pointer;max-width:340px}
 .body{flex:1;min-width:0}
 .title{font-size:16px;font-weight:600;line-height:1.35}
 .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#8b949e;font-size:13px;margin-top:5px}
@@ -329,7 +343,7 @@ updateCount();
 
 
 def _card(
-    i: int, paper: dict, template_ids: list[str], default_template: str
+    i: int, paper: dict, templates, default_template: str
 ) -> str:
     score = paper.get("relevance_score") or 0.0
     title = html.escape(paper.get("title") or "(untitled)")
@@ -341,12 +355,25 @@ def _card(
     meta = html.escape(f"{author_str} · {_meta(paper)}")
     url = html.escape(paper.get("url") or "#", quote=True)
     abstract = html.escape((paper.get("abstract") or "").strip()) or "(no abstract)"
-    template_options = "".join(
-        f'<option value="{html.escape(template_id, quote=True)}"'
-        f'{" selected" if template_id == default_template else ""}>'
-        f'{html.escape(template_id)}</option>'
-        for template_id in template_ids
-    )
+    template_options = ""
+    for template in _template_objects(templates):
+        compatible, reason = _compatibility(template, paper)
+        label = template.label or template.id
+        description = template.description
+        option_text = f"{label} [{template.evidence}]"
+        if description:
+            option_text += f" — {description}"
+        if not compatible:
+            option_text += f" — unavailable: {reason}"
+        option_title = description if compatible else f"{description} {reason}".strip()
+        template_options += (
+            f'<option value="{html.escape(template.id, quote=True)}"'
+            f'{" selected" if template.id == default_template else ""}'
+            f'{" disabled" if not compatible else ""}'
+            f' data-evidence="{html.escape(template.evidence, quote=True)}"'
+            f' title="{html.escape(option_title, quote=True)}">'
+            f'{html.escape(option_text)}</option>'
+        )
     return (
         f'<label class="card">'
         f'<div class="pick">'
@@ -423,10 +450,10 @@ def _related_card(i: int, paper: dict, facets: list) -> str:
 
 
 def _render_html(
-    ordered: list[dict], template_ids: list[str], default_template: str
+    ordered: list[dict], templates, default_template: str
 ) -> str:
     cards = "\n".join(
-        _card(i, paper, template_ids, default_template)
+        _card(i, paper, templates, default_template)
         for i, paper in enumerate(ordered)
     )
     header = (
@@ -498,13 +525,21 @@ def _done_html(n: int) -> str:
 # --------------------------------------------------------------------------- #
 
 def _select_fallback(
-    ordered: list[dict], template_ids: list[str], default_template: str
+    ordered: list[dict], templates, default_template: str
 ) -> list[dict]:
     use_color = sys.stdout.isatty()
     bold = BOLD if use_color else ""
     dim = DIM if use_color else ""
     reset = RESET if use_color else ""
 
+    normalized = _template_objects(templates)
+    template_ids = [template.id for template in normalized]
+    print("  Summary templates:")
+    for template in normalized:
+        print(
+            f"    {template.id}: {template.label or template.id} "
+            f"[{template.evidence}] — {template.description}"
+        )
     for i, p in enumerate(ordered, 1):
         score = p.get("relevance_score") or 0.0
         sc = _score_color(score) if use_color else ""
@@ -522,6 +557,7 @@ def _select_fallback(
     out = []
     try:
         picks = _parse_selection(raw, len(ordered), template_ids, default_template)
+        _validate_picks(picks, ordered, normalized)
     except SelectionError as exc:
         print(f"  Invalid selection: {exc}")
         return []
@@ -589,3 +625,46 @@ def _parse_selection(
             if 1 <= v <= n:
                 chosen[v - 1] = template_id
     return sorted(chosen.items())
+
+
+def _template_objects(templates) -> tuple[summary_templates.SummaryTemplate, ...]:
+    """Normalize the public selector input while tolerating legacy ID lists."""
+    normalized = []
+    for template in templates:
+        if isinstance(template, summary_templates.SummaryTemplate):
+            normalized.append(template)
+        else:
+            template_id = str(template)
+            normalized.append(
+                summary_templates.SummaryTemplate(
+                    template_id,
+                    Path(template_id),
+                    label=template_id,
+                    description="",
+                    evidence="abstract",
+                )
+            )
+    return tuple(normalized)
+
+
+def _compatibility(
+    template: summary_templates.SummaryTemplate, paper: dict
+) -> tuple[bool, str | None]:
+    # Legacy ID-only callers have no evidence metadata and remain unrestricted.
+    if not template.description and template.path == Path(template.id):
+        return True, None
+    return summary_templates.compatibility(template, paper)
+
+
+def _validate_picks(
+    picks: list[tuple[int, str]],
+    papers: list[dict],
+    templates: tuple[summary_templates.SummaryTemplate, ...],
+) -> None:
+    by_id = {template.id: template for template in templates}
+    for index, template_id in picks:
+        compatible, reason = _compatibility(by_id[template_id], papers[index])
+        if not compatible:
+            raise SelectionError(
+                f"Template {template_id!r} is incompatible with paper {index + 1}: {reason}"
+            )

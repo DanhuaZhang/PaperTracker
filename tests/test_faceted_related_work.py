@@ -74,6 +74,22 @@ def test_annotate_candidates_forces_metadata_only_without_abstract(monkeypatch):
     assert annotated[0]["evidence_basis"] == "metadata-only"
 
 
+def test_local_annotations_do_not_call_llm(monkeypatch):
+    paper = _paper("Local Annotation", "stance")
+    monkeypatch.setattr(
+        summarizer,
+        "run_json_prompt",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("LLM must not be called")
+        ),
+    )
+
+    annotated = related_work.annotate_candidates_locally([paper], _profile())
+
+    assert annotated[0]["role"] == "background"
+    assert annotated[0]["evidence_basis"] == "abstract"
+
+
 def test_rank_facet_candidates_round_robins_across_facets(monkeypatch):
     facets = [_facet("stance", "Stance"), _facet("formation", "Formation")]
     papers = [

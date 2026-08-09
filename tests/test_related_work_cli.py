@@ -183,6 +183,58 @@ def test_faceted_related_work_writes_matrix_and_json_without_seen(monkeypatch, t
     assert not (tmp_path / ".papertracker" / "related" / "seen.json").exists()
 
 
+def test_faceted_no_summarize_uses_configured_facets_without_llm(monkeypatch, tmp_path):
+    profile = _faceted_profile(tmp_path)
+    args = argparse.Namespace(
+        max_results=20,
+        limit=1,
+        threshold=None,
+        select=False,
+        no_summarize=True,
+        refresh_summaries=False,
+        priority_venues_only=False,
+        scorer=None,
+        provider=None,
+        model=None,
+        facet_count=6,
+        facet_candidates=5,
+    )
+    monkeypatch.setattr(
+        cli,
+        "_resolve_llm",
+        lambda args: (_ for _ in ()).throw(AssertionError("LLM preflight must not run")),
+    )
+    monkeypatch.setattr(
+        openalex_client,
+        "fetch_related_work_faceted",
+        lambda profile, facets, candidates_per_facet: [
+            {**_paper("Local Facet Paper", 10), "facet_hits": {"benchmarks": ["search"]}}
+        ],
+    )
+    monkeypatch.setattr(
+        relevance,
+        "score_batch",
+        lambda texts, topic_statement=None: [0.9] * len(texts),
+    )
+    monkeypatch.setattr(
+        summarizer,
+        "run_json_prompt",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("LLM must not run")),
+    )
+
+    assert cli._run_faceted_related_work_profile(profile, args) == 0
+
+    json_path = (
+        tmp_path
+        / "digests"
+        / "related"
+        / "related-work"
+        / f"{dt.date.today().isoformat()}.facets.json"
+    )
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["candidates"][0]["role"] == "background"
+
+
 def test_faceted_related_work_select_writes_only_approved_candidates(monkeypatch, tmp_path):
     profile = _faceted_profile(tmp_path)
     args = argparse.Namespace(

@@ -60,7 +60,7 @@ def _embedding_cache_dir() -> Path:
     configured = os.environ.get("FASTEMBED_CACHE_PATH", "").strip()
     if configured:
         return Path(configured).expanduser()
-    return Path(".papertracker") / "fastembed_cache"
+    return config.USER_DATA_DIR / "cache" / "fastembed"
 
 
 def _looks_like_incomplete_fastembed_cache(exc: Exception) -> bool:

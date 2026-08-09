@@ -277,6 +277,24 @@ JSON input:
     return out
 
 
+def annotate_candidates_locally(
+    candidates: list[dict],
+    profile: Any,
+) -> list[dict]:
+    """Add conservative deterministic annotations without invoking an LLM."""
+    out: list[dict] = []
+    for paper in candidates:
+        annotated = dict(paper)
+        annotated["role"] = "background"
+        annotated["why_cite"] = _default_why_cite(paper)
+        annotated["difference_from_contribution"] = _default_difference(profile)
+        annotated["evidence_basis"] = (
+            "abstract" if (paper.get("abstract") or "").strip() else "metadata-only"
+        )
+        out.append(annotated)
+    return out
+
+
 def apply_selection(
     candidates: list[dict],
     selected: list[dict],

@@ -1,11 +1,10 @@
 [project]
 name = "papertracker"
 version = "0.1.0"
-description = "Daily digest of multi-modal embodied-agent papers in 3D/XR/AR/VR"
+description = "Daily markdown digest of new papers matching your research topics"
 readme = "README.md"
-authors = [
-    { name = "Your Name", email = "you@example.com" }
-]
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "fastembed>=0.8.0",
@@ -19,7 +18,7 @@ dependencies = [
 rerank = ["sentence-transformers>=5"]
 
 [project.scripts]
-papertracker = "papertracker.cli:main"
+papertracker = "papertracker.bootstrap:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
@@ -27,3 +26,6 @@ dev = ["pytest>=8", "ruff>=0.6"]
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -196,3 +196,24 @@ def test_collection_papers_can_include_subcollections(tmp_path):
     )
 
     assert [paper["title"] for paper in papers] == ["Nested Paper", "Reading Paper"]
+
+
+def test_item_creators_loads_ordered_person_and_corporate_authors():
+    con = sqlite3.connect(":memory:")
+    con.executescript(
+        """
+        CREATE TABLE creators (creatorID INTEGER, firstName TEXT, lastName TEXT, fieldMode INTEGER);
+        CREATE TABLE creatorTypes (creatorTypeID INTEGER, creatorType TEXT);
+        CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER);
+        INSERT INTO creatorTypes VALUES (1, 'author');
+        INSERT INTO creatorTypes VALUES (2, 'editor');
+        INSERT INTO creators VALUES (1, 'Ada', 'Lovelace', 0);
+        INSERT INTO creators VALUES (2, '', 'Research Collective', 1);
+        INSERT INTO creators VALUES (3, 'Ed', 'Editor', 0);
+        INSERT INTO itemCreators VALUES (5, 2, 1, 1);
+        INSERT INTO itemCreators VALUES (5, 1, 1, 0);
+        INSERT INTO itemCreators VALUES (5, 3, 2, 2);
+        """
+    )
+    assert zotero._item_creators(con, 5) == ["Ada Lovelace", "Research Collective"]
+    con.close()

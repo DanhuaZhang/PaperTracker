@@ -38,6 +38,10 @@ _SELECT_FIELDS = ",".join(
 )
 
 
+class OpenAlexError(RuntimeError):
+    """Raised when a required OpenAlex discovery request cannot complete."""
+
+
 def fetch_abstract(doi: str) -> str | None:
     if not doi:
         return None
@@ -140,6 +144,8 @@ def _get_json(
     params: dict,
     timeout: int,
     log_label: str,
+    *,
+    raise_on_error: bool = False,
 ) -> dict | None:
     request_params = _auth_params(params)
     for attempt in range(_MAX_RETRIES):
@@ -154,12 +160,21 @@ def _get_json(
                 return resp.json()
             if resp.status_code not in (429, 503):
                 log.debug("OpenAlex %s -> %d", log_label, resp.status_code)
+                if raise_on_error:
+                    raise OpenAlexError(
+                        f"OpenAlex {log_label} returned HTTP {resp.status_code}"
+                    )
                 return None
             if attempt == _MAX_RETRIES - 1:
                 log.warning(
                     "OpenAlex %s -> %d after %d attempts; giving up",
                     log_label, resp.status_code, _MAX_RETRIES,
                 )
+                if raise_on_error:
+                    raise OpenAlexError(
+                        f"OpenAlex {log_label} returned HTTP {resp.status_code} "
+                        f"after {_MAX_RETRIES} attempts"
+                    )
                 return None
             retry_after = resp.headers.get("Retry-After", "")
             wait = float(retry_after) if retry_after.isdigit() else _BACKOFF_BASE_SEC * (2 ** attempt)
@@ -170,6 +185,8 @@ def _get_json(
             time.sleep(wait)
         except (requests.RequestException, ValueError) as e:
             log.debug("OpenAlex error for %s: %s", log_label, e)
+            if raise_on_error:
+                raise OpenAlexError(f"OpenAlex {log_label} failed: {e}") from e
             return None
     return None
 
@@ -192,6 +209,7 @@ def _fetch_works(params: dict, limit: int, discovery_source: str) -> list[dict]:
             page_params,
             timeout=30,
             log_label=f"{discovery_source} page={page}",
+            raise_on_error=True,
         )
         if data is None:
             break

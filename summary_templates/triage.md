@@ -1,8 +1,0 @@
-- **Core objective:**
-- **Key technical contribution:**
-- **Main results, benchmarks, or datasets:**
-- **Model & data:**
-- **Open source:**
-- **Future work & directions:**
-- **Limitations:**
-- **Relevance to embodied / XR / AR / VR research:**

@@ -16,8 +16,8 @@ def test_missing_projects_file_uses_legacy_profile(tmp_path, monkeypatch):
 
     assert profile.id is None
     assert profile.topic_statement == config.TOPIC_STATEMENT
-    assert profile.digest_dir == config.DIGEST_DIR
-    assert profile.seen_papers_file == config.SEEN_PAPERS_FILE
+    assert profile.digest_dir == config._user_path(config.DIGEST_DIR)
+    assert profile.seen_papers_file == config._user_path(config.SEEN_PAPERS_FILE)
 
 
 def test_project_profile_inherits_defaults_and_uses_project_state(tmp_path, monkeypatch):
@@ -48,9 +48,9 @@ relevance_threshold = 0.6
     assert profile.relevance_scorer == config.RELEVANCE_SCORER
     assert profile.hybrid_relevance_threshold == config.HYBRID_RELEVANCE_THRESHOLD
     assert profile.priority_venues == config.PRIORITY_VENUES
-    assert profile.digest_dir == "digests/agent-memory"
-    assert profile.seen_papers_file == ".papertracker/agent-memory/seen.json"
-    assert profile.summary_cache_file == ".papertracker/agent-memory/summary_cache.json"
+    assert profile.digest_dir == config._user_path("digests/agent-memory")
+    assert profile.seen_papers_file == config._user_path("state/agent-memory/seen.json")
+    assert profile.summary_cache_file == config._user_path("state/agent-memory/summary_cache.json")
 
 
 def test_project_profile_parses_contribution_and_related_work_facets(tmp_path, monkeypatch):

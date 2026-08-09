@@ -30,6 +30,7 @@ def fetch(
     out: list[dict] = []
     total_dropped_no_abstract = 0
     total_dropped_out_of_window = 0
+    failed_feeds: list[str] = []
     priority_venues = profile.priority_venues if profile else config.PRIORITY_VENUES
     for venue in priority_venues:
         rss_url = venue.get("rss")
@@ -39,6 +40,7 @@ def fetch(
             entries = _fetch_feed(rss_url)
         except Exception as e:
             log.warning("RSS %s (%s): %s", venue["name"], rss_url, e)
+            failed_feeds.append(venue["name"])
             continue
         log.info("RSS[%s]: %d entries", venue["name"], len(entries))
         for entry in entries:
@@ -57,6 +59,10 @@ def fetch(
                 continue
             paper["venue"] = tag_venue(paper["container_title"], priority_venues) or venue["name"]
             out.append(paper)
+    if failed_feeds:
+        raise RuntimeError(
+            "RSS feed fetch failed for " + ", ".join(sorted(set(failed_feeds)))
+        )
     log.info(
         "journal_rss: kept %d (dropped %d no-abstract, %d out of window) — pre-relevance",
         len(out), total_dropped_no_abstract, total_dropped_out_of_window,

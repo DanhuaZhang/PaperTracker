@@ -4,7 +4,7 @@ from papertracker import settings
 
 
 def test_provider_and_model_fall_back_to_local_config(tmp_path, monkeypatch):
-    project_cfg = tmp_path / "papertracker.toml"
+    project_cfg = tmp_path / "src.toml"
     project_cfg.write_text(
         'provider = "codex"\nclaude_model = "sonnet-local"\ncodex_model = "gpt-test-local"\n',
         encoding="utf-8",
@@ -27,7 +27,7 @@ def test_provider_and_model_fall_back_to_local_config(tmp_path, monkeypatch):
 
 
 def test_user_config_overrides_local_config(tmp_path, monkeypatch):
-    project_cfg = tmp_path / "papertracker.toml"
+    project_cfg = tmp_path / "src.toml"
     project_cfg.write_text(
         'provider = "codex"\nclaude_model = "sonnet-project"\ncodex_model = "gpt-project"\n',
         encoding="utf-8",
@@ -48,7 +48,7 @@ def test_user_config_overrides_local_config(tmp_path, monkeypatch):
 
 
 def test_generic_model_key_does_not_override_provider_specific_default(tmp_path, monkeypatch):
-    project_cfg = tmp_path / "papertracker.toml"
+    project_cfg = tmp_path / "src.toml"
     project_cfg.write_text(
         """
 provider = "codex"
@@ -71,10 +71,17 @@ codex_model = "gpt-project"
 
 
 def test_config_constants_load_from_project_config(tmp_path, monkeypatch):
-    project_cfg = tmp_path / "papertracker.toml"
+    project_cfg = tmp_path / "src.toml"
     template_dir = tmp_path / "templates"
     template_dir.mkdir()
-    (template_dir / "Test.md").write_text("## Test", encoding="utf-8")
+    (template_dir / "Screen.md").write_text(
+        '<!-- papertracker-template\nlabel="Screen"\ndescription="D"\nevidence="abstract"\n-->\n## Test',
+        encoding="utf-8",
+    )
+    (template_dir / "Deep.md").write_text(
+        '<!-- papertracker-template\nlabel="Deep"\ndescription="D"\nevidence="fulltext"\n-->\n## Test',
+        encoding="utf-8",
+    )
     project_cfg.write_text(
         """
 provider = "codex"
@@ -104,7 +111,8 @@ user_agent_name = "papertracker-test/1.0"
 zotero_data_dir = "~/TestZotero"
 zotero_linked_base = "~/LinkedPapers"
 summary_template_dir = "templates"
-default_summary_template = "Test"
+default_abstract_template = "Screen"
+default_fulltext_template = "Deep"
 """.strip(),
         encoding="utf-8",
     )
@@ -116,6 +124,7 @@ default_summary_template = "Test"
         m.delenv("PAPERTRACKER_EMAIL", raising=False)
         m.delenv("PAPERTRACKER_ZOTERO_DIR", raising=False)
         m.delenv("PAPERTRACKER_ZOTERO_LINKED_BASE", raising=False)
+        m.setenv("PAPERTRACKER_USER_DATA_DIR", str(tmp_path))
 
         loaded = importlib.reload(config)
 
@@ -146,15 +155,17 @@ default_summary_template = "Test"
         assert str(loaded.zotero_data_dir()).endswith("TestZotero")
         assert str(loaded.zotero_linked_base_dir()).endswith("LinkedPapers")
         templates, default = loaded.summary_template_catalog()
-        assert [template.id for template in templates] == ["Test"]
-        assert default.id == "Test"
-        assert default.path == template_dir / "Test.md"
+        assert [template.id for template in templates] == ["Deep", "Screen"]
+        assert default.id == "Screen"
+        assert default.path == template_dir / "Screen.md"
+        _, deep = loaded.summary_template_catalog("fulltext")
+        assert deep.id == "Deep"
 
     importlib.reload(config)
 
 
 def test_config_requires_project_config_values(tmp_path, monkeypatch):
-    project_cfg = tmp_path / "papertracker.toml"
+    project_cfg = tmp_path / "src.toml"
     project_cfg.write_text('provider = "codex"\n', encoding="utf-8")
 
     import papertracker.config as config

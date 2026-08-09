@@ -9,22 +9,19 @@ wheels/
 # Virtual environments
 .venv
 
-# Runtime state / output
-.seen_papers.json
-.summary_cache.json
-.papertracker/
-digests/*.md
-digests/**/*.md
-!digests/.gitkeep
+# Personal data: your topics, digests, run state, model cache.
+# Only the folder's own scaffolding is tracked.
+user_data/*
+!user_data/.gitkeep
+!user_data/README.md
 
-# Personal project profiles (copy projects.example.toml -> projects.toml)
-projects.toml
+# Tool caches
+.pytest_cache/
+.ruff_cache/
 
-# Env / IDE
+# Env / IDE / agent settings
 .env
 .DS_Store
 .idea/
 .vscode/
-
-# Claude Code local settings
-.claude/settings.local.json
+.claude/

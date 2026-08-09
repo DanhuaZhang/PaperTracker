@@ -39,9 +39,10 @@ def test_model_clears_managed_cache_and_retries_when_fastembed_snapshot_is_incom
 
     assert len(attempts) == 2
     assert attempts[0]["model_name"] == config.EMBEDDING_MODEL
-    assert Path(attempts[0]["cache_dir"]) == Path(".papertracker/fastembed_cache")
+    expected_cache = config.USER_DATA_DIR / "cache" / "fastembed"
+    assert Path(attempts[0]["cache_dir"]) == expected_cache
     assert attempts[1] == attempts[0]
-    assert cleared == [Path(".papertracker/fastembed_cache")]
+    assert cleared == [expected_cache]
 
 
 def test_score_texts_hybrid_combines_dense_and_bm25(monkeypatch):

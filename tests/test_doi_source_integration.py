@@ -1,5 +1,8 @@
 import datetime as dt
 
+import pytest
+import requests
+
 from papertracker import cli, config
 from papertracker.sources import crossref_client, journal_rss
 
@@ -57,6 +60,25 @@ def test_crossref_uses_shared_abstract_fallback(monkeypatch):
     assert papers[0]["metadata_sources"] == ["semantic_scholar"]
 
 
+def test_crossref_propagates_fetch_failure(monkeypatch):
+    monkeypatch.setattr(
+        crossref_client,
+        "_get_with_retry",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            requests.ConnectionError("offline")
+        ),
+    )
+
+    with pytest.raises(requests.ConnectionError, match="offline"):
+        crossref_client.search(
+            320,
+            "acm",
+            dt.date(2025, 1, 1),
+            dt.date(2025, 1, 3),
+            _profile(),
+        )
+
+
 def test_journal_rss_uses_shared_abstract_fallback(monkeypatch):
     venue = {"name": "Journal", "patterns": ["Journal"], "rss": "https://feed"}
     monkeypatch.setattr(
@@ -89,6 +111,22 @@ def test_journal_rss_uses_shared_abstract_fallback(monkeypatch):
     assert papers[0]["metadata_sources"] == ["openaire"]
 
 
+def test_journal_rss_propagates_feed_failure(monkeypatch):
+    venue = {"name": "Journal", "patterns": ["Journal"], "rss": "https://feed"}
+    monkeypatch.setattr(
+        journal_rss,
+        "_fetch_feed",
+        lambda url: (_ for _ in ()).throw(requests.ConnectionError("offline")),
+    )
+
+    with pytest.raises(RuntimeError, match="Journal"):
+        journal_rss.fetch(
+            dt.date(2025, 1, 1),
+            dt.date(2025, 1, 3),
+            _profile([venue]),
+        )
+
+
 def test_cli_enriches_only_doi_papers(monkeypatch):
     calls = []
 
@@ -108,4 +146,3 @@ def test_cli_enriches_only_doi_papers(monkeypatch):
     assert result is papers
     assert calls == ["10.1000/xyz"]
     assert papers[0]["oa_url"] == "https://example.org/paper.pdf"
-
