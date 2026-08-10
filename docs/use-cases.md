@@ -87,7 +87,7 @@ My Library
 
 ```bash
 uv run papertracker --list-zotero-collections
-uv run papertracker --zotero-collection "Reading/Deep Reading" --template deep-technical
+uv run papertracker --zotero-collection 'Reading/Deep Reading' --template deep-technical
 ```
 
 Text is extracted locally, page labels preserved, and processed in bounded
