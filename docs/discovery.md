@@ -127,8 +127,15 @@ uv run papertracker --days 14           # periodic wider sweep; dedup drops repe
 uv run papertracker --days 14 --no-summarize   # or just check what you missed
 ```
 
-A weekly `--days 14` run costs one extra fetch and nothing else: papers already
-in `seen.json` are skipped, so only genuinely new arrivals reach the summarizer.
+**`seen.json` makes the wider sweep free of quota, not free of work.** It is
+consulted late — after fetching, after missing-abstract recovery, after dedup,
+and after every paper in the window has been embedded and scored. Only then are
+seen papers dropped, which is what spares you the DOI enrichment calls and the
+summarization. Both windows are inclusive at each end, so `--days 14` covers 15
+calendar dates against `--days 2`'s three — roughly five times the HTTP traffic
+and five times the scoring time, and no extra AI quota. That is the trade worth
+making weekly rather than daily.
+
 Filtering by deposit date instead would fix this properly and is not implemented.
 
 If the discovery source and every configured fallback lack an abstract, the

@@ -153,14 +153,21 @@ suggestion:
   carry no venue, so they are never dropped by it. `--sources acm,ieee` is what
   actually excludes them.
 - **`--days 14`, not `--days 2`.** Publishers deposit to Crossref 1–14 days
-  after publication, and PaperTracker queries by *publication* date — so a
-  late deposit falls outside a two-day window permanently. A wider window run
-  weekly is what makes "catch every paper" true; `seen.json` keeps it cheap.
-  [Why](discovery.md#timing).
+  after publication, and PaperTracker queries by *publication* date — so a late
+  deposit falls outside a two-day window permanently. Running the wider window
+  weekly catches most of what a daily run misses, and `seen.json` keeps it free
+  of AI quota (though not of fetch and scoring time). [Why](discovery.md#timing).
 - **No `rss` line.** Adding one for an ACM or IEEE venue does nothing today:
   ACM's feeds return a Cloudflare `403` to any script, and IEEE's carry no DOI
   so every entry is dropped with a warning.
   [Details](discovery.md#customizing-venues-and-sources).
+
+Even at 14 days this is "miss very little", not "miss nothing". Three papers
+still get through: one deposited more than 14 days after its publication date,
+one pushed past the `max_results_per_query` cap of 1500 in a busy window, and one
+whose abstract no fallback provider has, since PaperTracker will not score a
+title alone. Widen `--days` further or raise `--max-results` if a venue you care
+about keeps slipping.
 
 ## 5. Running without spending any quota
 

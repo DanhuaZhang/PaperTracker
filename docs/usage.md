@@ -52,10 +52,10 @@ read it before installing.
 
 | Flag | Default | Effect |
 |---|---|---|
-| `--days N` | `default_days` (2) | Fetch the last N days |
+| `--days N` | `default_days` (2) | Window start is N days before the end date. Both ends are inclusive, so `--days 2` covers **three** calendar dates |
 | `--start-date YYYY-MM-DD` | — | Explicit window start; overrides `--days` |
 | `--end-date YYYY-MM-DD` | today | Explicit window end |
-| `--max-results N` | `max_results_per_query` (1500) | Cap papers fetched **per source** |
+| `--max-results N` | `max_results_per_query` (1500) | Cap papers fetched per arXiv and Crossref query — see below |
 | `--limit N` | 30 | Cap papers kept in `--related-work` output |
 | `--facet-count N` | 6 | Facets to generate when none are configured (clamped to 4–7) |
 | `--facet-candidates N` | 40 | OpenAlex candidates fetched per facet per discovery mode |
@@ -68,7 +68,7 @@ read it before installing.
 | `--priority-venues-only` | `priority_venue_only` (false) | Drop **Crossref** papers matching no priority venue. arXiv is unaffected — see below |
 | `--threshold F` | `relevance_threshold` (0.7) | Override the relevance cutoff. `-1` keeps everything |
 | `--scorer dense\|hybrid` | `relevance_scorer` (`dense`) | Which local scorer to use |
-| `--ignore-seen` | off | Make papers in `seen.json` eligible again. Cached summaries are still reused — pair with `--refresh-summaries` to regenerate |
+| `--ignore-seen` | off | Make papers in `seen.json` eligible again. A matching cached summary is still reused — pair with `--refresh-summaries` to force regeneration |
 
 **Summarization**
 
@@ -101,13 +101,28 @@ read it before installing.
 
 `--ignore-seen` and `--refresh-summaries` are different: the first controls
 *which papers are considered*, the second controls *whether a cached summary is
-reused* for papers that are processed. **Neither one alone re-writes a
-summary.** `--ignore-seen` brings a paper back into the run and then serves its
-cached summary unchanged; only `--refresh-summaries` calls the model again:
+reused* for papers that are processed. `--ignore-seen` brings a paper back into
+the run, and what happens next depends on the cache.
+
+A cache entry is keyed by a fingerprint over the paper metadata and evidence, the
+template's metadata and body, the provider, the model, and the prompt-pipeline
+version. **`--ignore-seen` alone re-uses the cached summary only when that
+fingerprint still matches.** If you changed the model, edited the template,
+rewrote `topic_statement`, or the paper's metadata was enriched since — or the
+paper was never summarized in the first place — the fingerprint differs, there
+is no hit, and the model is called. `--refresh-summaries` is the way to force
+that regardless:
 
 ```bash
 uv run papertracker --ignore-seen --refresh-summaries --days 14
 ```
+
+`--max-results` does not cap everything. It applies to the arXiv and Crossref
+queries, where it is genuinely per source. `journal_rss` ignores it and takes
+whatever the feed returns. Flat `--related-work` honours it but defaults to 200
+rather than 1500, since a starter bibliography does not need a wide net. Faceted
+`--related-work --facets` ignores it entirely — use `--facet-candidates` (per
+facet, per discovery mode) and `--limit` (the final cut) there instead.
 
 `--priority-venues-only` filters **Crossref results only**. Priority venues are
 matched against the `container-title` a publisher deposits, and arXiv records

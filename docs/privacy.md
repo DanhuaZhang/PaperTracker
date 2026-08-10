@@ -44,6 +44,14 @@ requirements.
 scoring all still run, so it is a complete workflow rather than a diagnostic
 mode — see [Use cases](use-cases.md).
 
+**One exception: `--select` wins over it on a daily run.** The two together open
+the browser picker and then summarize whatever you tick, because asking to choose
+papers to summarize is a clearer statement of intent than the flag that says not
+to. If you want the guarantee of no provider call, pass `--no-summarize` on its
+own. Faceted related-work mode is the other direction — there `--no-summarize`
+holds, and the run refuses to start unless `related_work_facets` is configured,
+because generating facets would need the model.
+
 ## Next
 
 - [How discovery works](discovery.md) — every network call PaperTracker makes

@@ -60,7 +60,7 @@ see what a session actually looks like.
 | OS | macOS, Linux, or Windows 10/11 |
 | `git` | to clone |
 | [`uv`](https://docs.astral.sh/uv/) | provisions Python 3.12 and all dependencies |
-| Claude Code **or** Codex CLI | required only when you ask for summaries |
+| Claude Code **or** Codex CLI | required for any step that calls a model — summaries, and faceted related-work |
 
 Everything else, including Python itself, is installed by `uv sync`.
 

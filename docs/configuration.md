@@ -48,8 +48,18 @@ Secrets are the four optional API keys, and they are environment-only on
 purpose — the only config file they could otherwise live in is tracked in git,
 where `.gitignore` offers no protection and a single `git add -A` publishes
 them. Every other setting is a parameter, so it belongs in a file that a
-teammate can read to understand a run, with a CLI flag or `PAPERTRACKER_*`
-variable to override it for one run or one shell.
+teammate can read to understand a run.
+
+Many of those parameters also have a CLI flag or a `PAPERTRACKER_*` variable, so
+you can override them for one run or one shell — the
+[flag reference](usage.md#all-cli-flags) and the
+[variable table](#all-environment-variables) list exactly which. **Not all of
+them do.** `embedding_model`, `enable_reranker`, `reranker_model`,
+`reranker_top_k`, `summary_timeout_sec`, `user_agent_name`, the two
+`default_*_template` keys, and the output paths (`digest_dir`,
+`seen_papers_file`, `summary_cache_file`) are read straight from `config.toml`;
+some of them, plus the thresholds and `arxiv_categories`, can additionally be set
+per project in `user_data/projects.toml`. To change any of those, edit the file.
 
 ## PaperTracker runs from a checkout
 
@@ -145,7 +155,7 @@ load it.
 |---|---|---|---|
 | `embedding_model` | `config.toml` | Scores every paper against your `topic_statement` | Daily and related-work scoring |
 | `reranker_model` | `config.toml` (per-profile override allowed) | Cross-encoder rerank of the top candidates | Only with `relevance_scorer = "hybrid"` **and** `enable_reranker = true` |
-| `claude_model` / `codex_model` | `config.toml` | Writes the summaries | Unless `--no-summarize` |
+| `claude_model` / `codex_model` | `config.toml` | Writes the summaries; also generates and annotates related-work facets | Unless `--no-summarize` |
 
 There are two summarizer model keys rather than one because model names are not
 interchangeable between providers — this way `--provider codex` doesn't also

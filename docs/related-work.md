@@ -66,8 +66,11 @@ Implemented in `src/papertracker/related_work.py`, `rank_facet_candidates`.
 
 First, 4–7 facets are generated — by the LLM from your `topic_statement` and
 `contribution_statement`, or taken verbatim from `related_work_facets` in your
-profile if configured, which skips that LLM call. Then **every paper is scored
-twice**: once against the facet text, once against the project topic.
+profile if configured, which skips that LLM call. Then the whole candidate batch
+is embedded and scored **once against the project topic and once against each
+facet** — so a 6-facet run is seven scoring passes over every candidate, not two.
+Each paper ends up with a project score and one score per facet; the formula
+below uses its project score and the score for the facet it was selected under.
 
 ```text
 score = 0.42·facet_relevance + 0.30·project_relevance + 0.18·citation

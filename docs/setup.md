@@ -28,9 +28,14 @@ version of this page.
 | OS | macOS, Linux, or Windows 10/11 |
 | `git` | to clone |
 | [`uv`](https://docs.astral.sh/uv/) | provisions Python 3.12 and all dependencies |
-| Claude Code **or** Codex CLI | required only when you ask for summaries |
+| Claude Code **or** Codex CLI | required for any step that calls a model |
 
 Everything else, including Python itself, is installed by `uv sync`.
+
+The AI CLI covers more than writing summaries: `--related-work --facets` also
+uses it to generate the facets and to annotate each candidate. Discovery, dedup,
+and relevance scoring never touch it, so `--no-summarize` runs need no CLI at
+all.
 
 Every platform runs the same test suite in CI. Where the three differ, this page
 shows a **Windows (PowerShell)** block next to the macOS/Linux one — the only
@@ -103,8 +108,9 @@ Authentication options and plan availability can change; use the official
 or [Codex CLI and authentication guides](https://learn.chatgpt.com/docs/codex/cli).
 
 Whichever way you install, PaperTracker only needs `claude` or `codex` to be
-findable on `PATH` — verify with `claude --version` in the same terminal you
-will run PaperTracker from. On Windows an npm-installed CLI lands as a `.cmd`
+findable on `PATH` — verify with `claude --version` (or `codex --version`, for
+whichever one you installed) in the same terminal you will run PaperTracker
+from. On Windows an npm-installed CLI lands as a `.cmd`
 shim; PaperTracker resolves it to its full path before spawning it, so the shim
 works without `shell=True`.
 
