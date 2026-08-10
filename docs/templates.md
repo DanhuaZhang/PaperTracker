@@ -45,8 +45,9 @@ ERROR Summary template 'misfiled' at .../abstract/misfiled.md declares
       or fix the metadata.
 ```
 
-Both folders must exist. IDs are unique across the whole tree, so `--template
-deep-technical` never needs a path.
+Both folders must exist **and each must hold at least one `.md`** — an empty one
+fails the same way a missing one does. IDs are unique across the whole tree, so
+`--template deep-technical` never needs a path.
 
 **This is the only place templates live.** What is in this folder is exactly
 what the summarizer fills in and what the `--select` dropdown offers — there is
