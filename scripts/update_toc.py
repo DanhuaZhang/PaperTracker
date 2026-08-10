@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Regenerate README.md's collapsible table of contents.
+"""Regenerate the collapsible table of contents in README.md and docs/*.md.
 
-    uv run python scripts/update_toc.py            # rewrite README.md in place
-    uv run python scripts/update_toc.py --check    # exit 1 if it is out of date
+    uv run python scripts/update_toc.py            # rewrite every page in place
+    uv run python scripts/update_toc.py --check    # exit 1 if any is out of date
+
+A page opts in by containing a '## Contents' heading; pages without one are left
+alone, so a short page never grows a pointless index.
 
 The TOC is emitted as pure HTML rather than Markdown-in-HTML. GitHub only
 parses Markdown inside an HTML block after a blank line, and a blank line also
@@ -20,7 +23,7 @@ import re
 import sys
 from pathlib import Path
 
-README = Path(__file__).resolve().parent.parent / "README.md"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 START = "## Contents"
 END = "---"
@@ -52,19 +55,24 @@ def _esc(text: str) -> str:
 
 
 def _headings(lines: list[str]) -> list[tuple[int, str]]:
-    """Return (level, text) for every real heading, ignoring fenced code blocks.
+    """Return (level, text) for every heading, ignoring fenced code blocks.
 
     The fence check is what keeps a '## Executive takeaway' inside a template
     sample out of the TOC.
+
+    Every level is returned, not just the ones the TOC shows, because GitHub
+    numbers duplicate slugs across all headings on the page: with an `# Setup`
+    above a `## Setup`, the second is `setup-1`. Slugging only h2/h3 would emit
+    `setup` and link to the wrong place.
     """
     found, in_fence = [], False
     for line in lines:
-        if line.startswith("```"):
+        if line.lstrip().startswith("```"):
             in_fence = not in_fence
             continue
         if in_fence:
             continue
-        m = re.match(r"^(#{2,3}) (.+?)\s*$", line)
+        m = re.match(r"^(#{1,6}) (.+?)\s*$", line)
         if m:
             found.append((len(m.group(1)), m.group(2)))
     return found
@@ -74,13 +82,15 @@ def build_toc(lines: list[str]) -> list[str]:
     seen: dict[str, int] = {}
     sections: list[tuple[str, str, list[tuple[str, str]]]] = []
     for level, text in _headings(lines):
+        # Slug every heading, so the dedup counter matches GitHub's, but show
+        # only h2/h3 — an h1 is the page title and h4+ is too fine for an index.
         anchor = _slug(text, seen)
         if level == 2:
             # The Contents heading indexes everything else, not itself.
             if text.strip().lower() == "contents":
                 continue
             sections.append((text, anchor, []))
-        elif sections:
+        elif level == 3 and sections:
             sections[-1][2].append((text, anchor))
 
     out = [GENERATED_NOTE, "<ul>"]
@@ -105,19 +115,47 @@ def build_toc(lines: list[str]) -> list[str]:
     return out
 
 
-def _span(lines: list[str]) -> tuple[int, int]:
-    """Return the line indices bounding the current TOC body."""
-    try:
-        start = next(i for i, line in enumerate(lines) if line.strip() == START)
-    except StopIteration:
-        raise SystemExit(f"{README}: no '{START}' heading to anchor the TOC to")
+def _span(path: Path, lines: list[str]) -> tuple[int, int]:
+    """Return the line indices bounding the current TOC body.
+
+    The block ends at whichever comes first: a horizontal rule, or the next
+    section heading. Accepting both means a page can set the TOC off with a
+    rule (as README does) or just let the next section end it, without every
+    page needing the same furniture.
+    """
+    start = next(i for i, line in enumerate(lines) if line.strip() == START)
     try:
         end = next(
-            i for i in range(start + 1, len(lines)) if lines[i].strip() == END
+            i
+            for i in range(start + 1, len(lines))
+            if lines[i].strip() == END or lines[i].startswith("## ")
         )
     except StopIteration:
-        raise SystemExit(f"{README}: '{START}' is not closed by a '{END}' rule")
+        raise SystemExit(
+            f"{path}: nothing closes the '{START}' block — add a '{END}' rule "
+            "or a following '## ' heading"
+        )
     return start, end
+
+
+def pages() -> list[Path]:
+    """Every page that opted in by having a Contents heading."""
+    candidates = [REPO_ROOT / "README.md", *sorted((REPO_ROOT / "docs").glob("*.md"))]
+    return [
+        p
+        for p in candidates
+        if p.is_file()
+        and any(
+            line.strip() == START for line in p.read_text(encoding="utf-8").splitlines()
+        )
+    ]
+
+
+def rebuild(path: Path) -> tuple[list[str], list[str]]:
+    """Return (current lines, what the file should contain)."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    start, end = _span(path, lines)
+    return lines, lines[: start + 1] + [""] + build_toc(lines) + [""] + lines[end:]
 
 
 def main() -> int:
@@ -125,25 +163,31 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="do not write; exit 1 if the TOC does not match the headings",
+        help="do not write; exit 1 if any TOC does not match its headings",
     )
     args = parser.parse_args()
 
-    lines = README.read_text(encoding="utf-8").splitlines()
-    start, end = _span(lines)
-    rebuilt = lines[: start + 1] + [""] + build_toc(lines) + [""] + lines[end:]
+    stale: list[Path] = []
+    for path in pages():
+        lines, rebuilt = rebuild(path)
+        if lines == rebuilt:
+            continue
+        stale.append(path)
+        if not args.check:
+            path.write_text("\n".join(rebuilt) + "\n", encoding="utf-8")
 
-    if rebuilt == lines:
-        print("TOC is up to date.")
+    rel = [str(p.relative_to(REPO_ROOT)) for p in stale]
+    if not stale:
+        print(f"All {len(pages())} tables of contents are up to date.")
         return 0
     if args.check:
         print(
-            "TOC is out of date. Run: uv run python scripts/update_toc.py",
+            f"Out of date: {', '.join(rel)}\n"
+            "Run: uv run python scripts/update_toc.py",
             file=sys.stderr,
         )
         return 1
-    README.write_text("\n".join(rebuilt) + "\n", encoding="utf-8")
-    print(f"Rewrote the TOC in {README.name}.")
+    print(f"Rewrote {len(stale)} table(s) of contents: {', '.join(rel)}")
     return 0
 
 

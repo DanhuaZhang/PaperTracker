@@ -48,10 +48,31 @@ alongside it or `uv sync --locked` fails in CI.
   `config.toml` just to configure your own machine.
 - `summary_templates/*.md` is the single copy of the summary formats. There is
   no packaged duplicate to keep in sync.
-- README's table of contents is generated. Add a heading, then run
-  `uv run python scripts/update_toc.py`; a test fails if it drifts.
 - Everything machine-local lives in `user_data/`, which is gitignored. Never
   commit digests, topics, or caches.
+
+## Documentation
+
+The manual lives in [`docs/`](docs/README.md) and README is a landing page.
+Docs are versioned with the code, so a documentation fix belongs in the same
+pull request as the behavior it describes.
+
+- **Cross-page links are relative** (`configuration.md#reasoning-effort`), which
+  keeps them working on GitHub, in an editor preview, and in a clone.
+- **Tables of contents are generated.** After adding or renaming a heading:
+
+  ```bash
+  uv run python scripts/update_toc.py
+  ```
+
+  A page opts in by having a `## Contents` heading; short pages skip it.
+- **Screenshots** go in `docs/images/`, which has its own
+  [capture checklist](docs/images/README.md) — including how to shoot them from
+  a throwaway demo profile so no real research ends up in a public image.
+
+`tests/test_docs_links.py` fails on a dangling anchor, a link to a page that
+does not exist, an image that was referenced but never committed, or a stale
+table of contents.
 
 ## Reporting a security issue
 
