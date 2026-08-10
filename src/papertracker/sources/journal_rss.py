@@ -30,12 +30,15 @@ def fetch(
     out: list[dict] = []
     total_dropped_no_abstract = 0
     total_dropped_out_of_window = 0
+    total_dropped_no_doi = 0
     failed_feeds: list[str] = []
+    attempted = 0
     priority_venues = profile.priority_venues if profile else config.PRIORITY_VENUES
     for venue in priority_venues:
         rss_url = venue.get("rss")
         if not rss_url:
             continue
+        attempted += 1
         try:
             entries = _fetch_feed(rss_url)
         except Exception as e:
@@ -43,9 +46,12 @@ def fetch(
             failed_feeds.append(venue["name"])
             continue
         log.info("RSS[%s]: %d entries", venue["name"], len(entries))
+        venue_dropped_no_doi = 0
         for entry in entries:
             paper = _to_paper(entry, venue)
             if paper is None:
+                venue_dropped_no_doi += 1
+                total_dropped_no_doi += 1
                 continue
             if paper["published"] and not (lo <= paper["published"] <= hi):
                 total_dropped_out_of_window += 1
@@ -59,13 +65,38 @@ def fetch(
                 continue
             paper["venue"] = tag_venue(paper["container_title"], priority_venues) or venue["name"]
             out.append(paper)
+        # A feed whose every entry lacks a DOI is not an empty feed, but the
+        # totals below cannot tell the two apart. IEEE Xplore's TOC feeds are
+        # the live example: they carry titles and abstracts but identify papers
+        # by Xplore document URL only, so every entry is unusable here and the
+        # venue contributes nothing without anyone noticing.
+        if entries and venue_dropped_no_doi == len(entries):
+            log.warning(
+                "RSS[%s]: all %d entries carry no DOI, so none can be deduplicated "
+                "against Crossref and all were dropped. This feed adds nothing; "
+                "the venue still arrives via Crossref.",
+                venue["name"], len(entries),
+            )
     if failed_feeds:
-        raise RuntimeError(
-            "RSS feed fetch failed for " + ", ".join(sorted(set(failed_feeds)))
+        names = ", ".join(sorted(set(failed_feeds)))
+        # Only a total failure is worth failing the source over. One publisher
+        # blocking us — ACM's Digital Library sits behind a Cloudflare challenge
+        # that no server-side client can pass — used to discard the papers every
+        # other feed had already returned, and mark the whole run as failed.
+        # RSS is a head start on Crossref, never the only route to a paper, so
+        # degrading quietly costs a day or two rather than losing anything.
+        if len(failed_feeds) == attempted:
+            raise RuntimeError(f"every RSS feed failed: {names}")
+        log.warning(
+            "RSS feed fetch failed for %s — keeping the %d feed(s) that answered. "
+            "Those venues still arrive via Crossref, typically a day or two later.",
+            names, attempted - len(failed_feeds),
         )
     log.info(
-        "journal_rss: kept %d (dropped %d no-abstract, %d out of window) — pre-relevance",
-        len(out), total_dropped_no_abstract, total_dropped_out_of_window,
+        "journal_rss: kept %d (dropped %d no-DOI, %d no-abstract, %d out of window) "
+        "— pre-relevance",
+        len(out), total_dropped_no_doi, total_dropped_no_abstract,
+        total_dropped_out_of_window,
     )
     return out
 

@@ -22,6 +22,9 @@ Common symptoms and their fixes, plus the platform-specific notes for Windows.
 | `--list-projects` shows nothing | You haven't created `user_data/projects.toml` — see [Setup step 4](setup.md#4-create-your-topics-file). |
 | First run is slow | It's downloading the ~65 MB embedding model into `user_data/cache/fastembed/`. `uv sync` does not fetch it. Cached afterwards. |
 | Log says `capped at 1500 of N total` | Raise `max_results_per_query` in `config.toml` or pass `--max-results`. Scoring is local, so the cost here is HTTP traffic and time. |
+| `Source journal_rss failed: every RSS feed failed` | Every configured feed was unreachable. If they are all ACM, that is expected — remove `rss` from ACM venues, which [cannot be fetched from a script](discovery.md#customizing-venues-and-sources). Otherwise check your connection. |
+| `RSS feed fetch failed for <venue> — keeping the N feed(s) that answered` | A warning, not an error. That publisher blocked or timed out; the other feeds were kept and the venue still arrives via Crossref. |
+| `RSS[<venue>]: all N entries carry no DOI` | The feed loaded but identifies papers by publisher URL, so nothing could be matched against Crossref. Known for IEEE Xplore — [details](discovery.md#customizing-venues-and-sources). Drop the `rss` line; the venue still arrives via Crossref. |
 | Re-summarize a paper you already saw | `--ignore-seen`, or delete `user_data/state/<project-id>/seen.json`. |
 | Inspect matches without spending quota | `--no-summarize`, which sorts by relevance score. |
 | Windows: `uv` not recognized | Reopen the terminal after installing, so `PATH` is re-read. |

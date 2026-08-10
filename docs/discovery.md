@@ -45,7 +45,7 @@ may hit it and what you may do with what comes back.
 | [arXiv API](https://info.arxiv.org/help/api/user-manual.html) | `export.arxiv.org/api/query` | Pages of 100, 3 s between pages (arXiv asks for one request per 3 s on one connection); [terms of use](https://info.arxiv.org/help/api/tou.html) | Metadata is CC0. The papers themselves are **not** — each carries [its author's chosen license](https://info.arxiv.org/help/license/index.html). |
 | [Crossref Works](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) | `api.crossref.org/works` | Pages of 100, 0.5 s between pages, date-filtered queries | Almost all metadata is unrestricted, but *abstracts* deposited by publishers may be copyrighted. |
 | [OpenAlex Works](https://developers.openalex.org/api-reference/introduction) | `api.openalex.org/works` | Pages of 100 (50 for semantic search), 1 s between pages, topic truncated to 2000 chars | The dataset is CC0. |
-| Journal RSS | publisher feed URLs you configure | One fetch per feed per run | Publisher-provided. Titles and links are used for discovery only. |
+| Journal RSS | publisher feed URLs you configure | One fetch per feed per run. Neither ACM's nor IEEE's feeds are usable today — [why](#customizing-venues-and-sources) | Publisher-provided. Titles and links are used for discovery only. |
 | Zotero | local `zotero.sqlite` | No network. Read-only copy — see [Zotero mode](zotero.md#your-library-is-never-modified) | Your own library, under whatever rights its items already carry. |
 
 Both arXiv and Crossref are capped per run by `max_results_per_query` (1500 by
@@ -129,15 +129,41 @@ rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"   # optional
 [[priority_venues]]
 name = "ACM TOG"
 publisher = "acm"
-patterns = ["Transactions on Graphics"]
-rss = "https://dl.acm.org/action/showFeed?type=etoc&feed=rss&jc=tog"
+patterns = ["Transactions on Graphics"]   # no rss — see below
 ```
 
-ACM's feed URLs follow that shape with the journal code at the end — `jc=tog`
-for TOG, `jc=tochi` for TOCHI. IEEE's are numbered per publication; the feed
-link is on the journal's Xplore page. An `rss` entry is always optional: without
-one the venue still tags papers and still works with
-`--priority-venues-only`, it just waits for the Crossref deposit.
+**ACM Digital Library feeds do not work from a script.** Every request to
+`dl.acm.org` — feed URLs included — is answered with a Cloudflare browser
+challenge and `403`, whatever User-Agent you send. The feeds are real and load
+in a browser; there is simply no server-side way to fetch them, and passing the
+challenge would mean impersonating a browser against a policy that exists to
+stop exactly that. Leave `rss` off ACM venues. They still arrive through
+Crossref member `320`, just without the day or two of head start.
+
+**IEEE Xplore feeds fetch fine but currently yield nothing.** They are not
+blocked — they return a full table of contents with titles and abstracts — but
+they identify each paper by an Xplore document URL and carry no DOI in any
+field. PaperTracker keys papers by DOI so an RSS hit and the later Crossref
+deposit collapse into one entry, so an entry without one is dropped rather than
+duplicated a few days later. The run warns when a whole feed goes this way:
+
+```text
+WARNING RSS[IEEE TVCG]: all 27 entries carry no DOI, so none can be
+        deduplicated against Crossref and all were dropped.
+```
+
+Fixing that means resolving title → DOI against Crossref, which is not
+implemented. Until it is, IEEE `rss` entries cost one HTTP request and return
+nothing; the venues still arrive via Crossref member `263`.
+
+So the honest position today: **`journal_rss` is configured but contributes
+nothing for ACM or IEEE.** It stays wired up because the mechanism is sound and
+works for any publisher whose feed carries a DOI — `prism:doi`, `dc:identifier`,
+or a DOI anywhere in the link or summary.
+
+An `rss` entry is always optional. Without one a venue still tags papers with
+its `★` badge and still works with `--priority-venues-only` — it just waits for
+the Crossref deposit.
 
 ## Next
 
