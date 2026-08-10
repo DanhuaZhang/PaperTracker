@@ -1,4 +1,5 @@
 """`papertracker` console entry point."""
+
 from __future__ import annotations
 
 import argparse
@@ -109,32 +110,45 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Maximum papers to keep in --related-work output (default 30).",
     )
     p.add_argument(
-        "--days", type=int, default=config.DEFAULT_DAYS,
+        "--days",
+        type=int,
+        default=config.DEFAULT_DAYS,
         help=f"Fetch papers from the last N days (default {config.DEFAULT_DAYS}).",
     )
     p.add_argument(
-        "--start-date", type=dt.date.fromisoformat, default=None,
+        "--start-date",
+        type=dt.date.fromisoformat,
+        default=None,
         help="Start of fetch window (YYYY-MM-DD). Overrides --days; end defaults to today.",
     )
     p.add_argument(
-        "--end-date", type=dt.date.fromisoformat, default=None,
+        "--end-date",
+        type=dt.date.fromisoformat,
+        default=None,
         help="End of fetch window (YYYY-MM-DD). Defaults to today.",
     )
     p.add_argument(
-        "--max-results", type=int, default=None,
+        "--max-results",
+        type=int,
+        default=None,
         help=f"Max papers fetched per source (default {config.MAX_RESULTS_PER_QUERY}).",
     )
     p.add_argument(
-        "--provider", choices=("claude", "codex"), default=None,
+        "--provider",
+        choices=("claude", "codex"),
+        default=None,
         help="LLM provider. Overrides env var / config file.",
     )
     p.add_argument(
-        "--model", default=None,
+        "--model",
+        default=None,
         help="Model name. Overrides env var / config file.",
     )
     p.add_argument(
-        "--effort", choices=(*settings.VALID_EFFORTS, settings.INHERIT_EFFORT),
-        default=None, metavar="LEVEL",
+        "--effort",
+        choices=(*settings.VALID_EFFORTS, settings.INHERIT_EFFORT),
+        default=None,
+        metavar="LEVEL",
         help=(
             "How hard the model thinks per summary, on one scale for both "
             f"providers: {', '.join(settings.VALID_EFFORTS)} "
@@ -146,20 +160,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--sources",
         default=None,
-        help=(
-            "Comma-separated source list. "
-            f"Available: {', '.join(SOURCE_FETCHERS)}"
-        ),
+        help=(f"Comma-separated source list. Available: {', '.join(SOURCE_FETCHERS)}"),
     )
     p.add_argument(
-        "--priority-venues-only", action="store_true",
+        "--priority-venues-only",
+        action="store_true",
         help="Drop papers not matching any configured priority venue.",
     )
     p.add_argument(
-        "--threshold", type=float, default=None,
-        help=(
-            "Override the active relevance threshold. Lower = looser, higher = stricter."
-        ),
+        "--threshold",
+        type=float,
+        default=None,
+        help=("Override the active relevance threshold. Lower = looser, higher = stricter."),
     )
     p.add_argument(
         "--scorer",
@@ -168,23 +180,27 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Relevance scorer to use. 'dense' is the original cosine-only scorer.",
     )
     p.add_argument(
-        "--ignore-seen", action="store_true",
+        "--ignore-seen",
+        action="store_true",
         help="Re-summarize papers already in the active seen file (useful for backfill).",
     )
     p.add_argument(
-        "--refresh-summaries", action="store_true",
+        "--refresh-summaries",
+        action="store_true",
         help="Ignore the summary cache and re-generate summaries (overwrites cache entries).",
     )
     p.add_argument(
-        "--no-summarize", action="store_true",
+        "--no-summarize",
+        action="store_true",
         help="Skip AI CLI calls. Daily mode prints matches; faceted related-work "
-             "requires configured facets and uses local annotations.",
+        "requires configured facets and uses local annotations.",
     )
     p.add_argument(
-        "--select", action="store_true",
+        "--select",
+        action="store_true",
         help="Interactively pick which matched papers to summarize via a browser "
-             "UI (numbered text prompt when headless), then summarize only those. "
-             "In daily mode, overrides --no-summarize.",
+        "UI (numbered text prompt when headless), then summarize only those. "
+        "In daily mode, overrides --no-summarize.",
     )
     p.add_argument(
         "--template",
@@ -209,12 +225,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--zotero-template",
         default=None,
-        help=(
-            "Deprecated alias for --template when using --zotero-collection."
-        ),
+        help=("Deprecated alias for --template when using --zotero-collection."),
     )
     p.add_argument(
-        "-v", "--verbose", action="store_true",
+        "-v",
+        "--verbose",
+        action="store_true",
         help="Enable DEBUG logging.",
     )
     return p.parse_args(argv)
@@ -245,7 +261,8 @@ def _resolve_llm(args: argparse.Namespace) -> tuple[str | None, str | None, int]
     log.info("Model:    %s (from %s)", model, model_src)
     log.info(
         "Effort:   %s (from %s)",
-        effort or "provider default", effort_src,
+        effort or "provider default",
+        effort_src,
     )
     summarizer.set_reasoning_effort(effort)
     try:
@@ -280,7 +297,7 @@ def _fetch_all(
                 papers = fut.result()
                 log.info("Source %s -> %d papers", name, len(papers))
                 results.extend(papers)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — one dead source must not sink the run
                 log.error("Source %s failed: %s", name, e)
                 failures.append(name)
         return results, failures
@@ -316,7 +333,10 @@ def _resolve_profiles(args: argparse.Namespace) -> tuple[list[config.ProjectProf
         if args.list_projects:
             profiles = config.project_profiles()
             if not profiles:
-                print("(no user_data/projects.toml configured; using the placeholder topic from config.toml)")
+                print(
+                    "(no user_data/projects.toml configured; "
+                    "using the placeholder topic from config.toml)"
+                )
             else:
                 default = config.default_project_id()
                 for profile in profiles:
@@ -334,7 +354,9 @@ def _resolve_profiles(args: argparse.Namespace) -> tuple[list[config.ProjectProf
         return None, 2
 
 
-def _effective_profile(profile: config.ProjectProfile, args: argparse.Namespace) -> config.ProjectProfile:
+def _effective_profile(
+    profile: config.ProjectProfile, args: argparse.Namespace
+) -> config.ProjectProfile:
     updates = {}
     if args.priority_venues_only and not profile.priority_venue_only:
         updates["priority_venue_only"] = True
@@ -483,7 +505,10 @@ def _run_profile(
     sources = [s.strip() for s in source_arg.split(",") if s.strip()]
     log.info(
         "Sources: %s | window=%s..%s | cap=%d/source",
-        ", ".join(sources), start_date, end_date, config.MAX_RESULTS_PER_QUERY,
+        ", ".join(sources),
+        start_date,
+        end_date,
+        config.MAX_RESULTS_PER_QUERY,
     )
     log.info(
         "Relevance scorer: %s | threshold=%.3f",
@@ -516,10 +541,7 @@ def _run_profile(
 
     seen_path = Path(profile.seen_papers_file)
     seen = set() if args.ignore_seen else dedup.load_seen(seen_path)
-    new_papers = [
-        p for p in relevant
-        if not (seen & set(p.get("merged_ids", [p["canonical_id"]])))
-    ]
+    new_papers = [p for p in relevant if not (seen & set(p.get("merged_ids", [p["canonical_id"]])))]
     _enrich_doi_papers(new_papers)
     log.info("New (unseen) papers: %d", len(new_papers))
 
@@ -527,9 +549,7 @@ def _run_profile(
 
     if args.select:
         templates, default_template = _summary_template_options("abstract", args)
-        to_summarize = selector.select_papers(
-            new_papers, templates, default_template
-        )
+        to_summarize = selector.select_papers(new_papers, templates, default_template)
         if not to_summarize:
             log.info("No papers selected — nothing summarized.")
             return source_exit_code
@@ -570,15 +590,15 @@ def _run_profile(
     for i, paper in enumerate(to_summarize, 1):
         template_id = paper.get("template", default_template)
         try:
-            content_fingerprint = _summary_fingerprint(
-                paper, template_id, provider, model, profile
-            )
+            content_fingerprint = _summary_fingerprint(paper, template_id, provider, model, profile)
         except summarizer.PdfTextExtractionError as exc:
             log.error("Failed: %s — %s", paper["canonical_id"], exc)
             summary_failures += 1
             continue
-        cached = None if args.refresh_summaries else summary_cache.lookup(
-            cache, paper, content_fingerprint
+        cached = (
+            None
+            if args.refresh_summaries
+            else summary_cache.lookup(cache, paper, content_fingerprint)
         )
         if cached is not None:
             cache_hits += 1
@@ -600,9 +620,7 @@ def _run_profile(
             paper["title"][:60],
         )
         try:
-            summary = summarizer.summarize_paper(
-                paper, provider, model, template_id, profile
-            )
+            summary = summarizer.summarize_paper(paper, provider, model, template_id, profile)
             new_cache_entries[
                 summary_cache.cache_key(paper["canonical_id"], content_fingerprint)
             ] = summary_cache.entry(
@@ -614,7 +632,9 @@ def _run_profile(
                 generated=today_str,
             )
         except subprocess.CalledProcessError as e:
-            reason = (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
+            reason = (
+                (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
+            )
             log.error("Failed: %s — %s", paper["canonical_id"], reason)
             summary_failures += 1
             continue
@@ -662,7 +682,9 @@ def _run_profile(
 def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Namespace) -> int:
     profile = _effective_profile(profile, args)
     label = profile.id or "legacy"
-    cap = args.max_results if args.max_results is not None else min(config.MAX_RESULTS_PER_QUERY, 200)
+    cap = (
+        args.max_results if args.max_results is not None else min(config.MAX_RESULTS_PER_QUERY, 200)
+    )
     limit = max(1, args.limit)
     threshold = _active_threshold(profile, args)
     today_str = dt.date.today().isoformat()
@@ -670,7 +692,10 @@ def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Nam
     log.info("Project: %s (%s)", profile.name, label)
     log.info(
         "Related work: OpenAlex cap=%d | limit=%d | scorer=%s | threshold=%.3f",
-        cap, limit, profile.relevance_scorer, threshold,
+        cap,
+        limit,
+        profile.relevance_scorer,
+        threshold,
     )
 
     try:
@@ -687,9 +712,7 @@ def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Nam
 
     if args.select:
         templates, default_template = _summary_template_options("abstract", args)
-        to_summarize = selector.select_papers(
-            ranked, templates, default_template
-        )
+        to_summarize = selector.select_papers(ranked, templates, default_template)
         if not to_summarize:
             log.info("No papers selected — writing unsummarized related-work digest.")
             pairs: list[tuple[dict, str | None]] = [(p, None) for p in ranked]
@@ -722,7 +745,9 @@ def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Nam
     return 1 if summary_failures else 0
 
 
-def _run_faceted_related_work_profile(profile: config.ProjectProfile, args: argparse.Namespace) -> int:
+def _run_faceted_related_work_profile(
+    profile: config.ProjectProfile, args: argparse.Namespace
+) -> int:
     profile = _effective_profile(profile, args)
     label = profile.id or "legacy"
     limit = max(1, args.limit)
@@ -745,7 +770,8 @@ def _run_faceted_related_work_profile(profile: config.ProjectProfile, args: argp
 
     log.info("Project: %s (%s)", profile.name, label)
     log.info(
-        "Faceted related work: facet_count=%d | facet_candidates=%d | limit=%d | scorer=%s | threshold=%.3f",
+        "Faceted related work: facet_count=%d | facet_candidates=%d | limit=%d "
+        "| scorer=%s | threshold=%.3f",
         args.facet_count,
         args.facet_candidates,
         limit,
@@ -777,9 +803,7 @@ def _run_faceted_related_work_profile(profile: config.ProjectProfile, args: argp
         if no_summarize:
             annotated = related_work.annotate_candidates_locally(ranked, profile)
         else:
-            annotated = related_work.annotate_candidates(
-                ranked, facets, profile, provider, model
-            )
+            annotated = related_work.annotate_candidates(ranked, facets, profile, provider, model)
     except related_work.RelatedWorkError as e:
         log.error(str(e))
         return 1
@@ -826,14 +850,11 @@ def _rank_related_work(
 ) -> list[dict]:
     if not papers:
         return []
-    texts = [
-        f"{p.get('title', '')}. {p.get('abstract', '')}".strip()
-        for p in papers
-    ]
+    texts = [f"{p.get('title', '')}. {p.get('abstract', '')}".strip() for p in papers]
     scores = relevance.score_texts(profile.topic_statement, texts, **_score_kwargs(profile))
     max_citations = max(1, max(int(p.get("cited_by_count") or 0) for p in papers))
     kept: list[dict] = []
-    for paper, score in zip(papers, scores):
+    for paper, score in zip(papers, scores, strict=True):
         rel_score = score.final_score
         citations = int(paper.get("cited_by_count") or 0)
         citation_score = math.log1p(citations) / math.log1p(max_citations)
@@ -842,10 +863,7 @@ def _rank_related_work(
         semantic_bonus = 0.03 if "semantic" in discovery_sources else 0.0
         relevance.annotate_score_fields(paper, score)
         paper["related_work_score"] = (
-            (0.70 * rel_score)
-            + (0.24 * citation_score)
-            + channel_bonus
-            + semantic_bonus
+            (0.70 * rel_score) + (0.24 * citation_score) + channel_bonus + semantic_bonus
         )
         if rel_score >= threshold:
             kept.append(paper)
@@ -871,26 +889,28 @@ def _summarize_selected_related_work(
     for i, paper in enumerate(to_summarize, 1):
         template_id = paper.get("template", default_template)
         try:
-            content_fingerprint = _summary_fingerprint(
-                paper, template_id, provider, model, profile
-            )
+            content_fingerprint = _summary_fingerprint(paper, template_id, provider, model, profile)
         except summarizer.PdfTextExtractionError as exc:
             log.error("Failed: %s — %s", paper["canonical_id"], exc)
             pairs.append((paper, f'_"(summary failed: {exc})"_'))
             failures += 1
             continue
-        cached = None if args.refresh_summaries else summary_cache.lookup(
-            cache, paper, content_fingerprint
+        cached = (
+            None
+            if args.refresh_summaries
+            else summary_cache.lookup(cache, paper, content_fingerprint)
         )
         if cached is not None:
-            log.info("Cached [%d/%d] (%s) %s", i, len(to_summarize), template_id, paper["title"][:60])
+            log.info(
+                "Cached [%d/%d] (%s) %s", i, len(to_summarize), template_id, paper["title"][:60]
+            )
             pairs.append((paper, cached))
             continue
-        log.info("Summarizing [%d/%d] (%s) %s", i, len(to_summarize), template_id, paper["title"][:60])
+        log.info(
+            "Summarizing [%d/%d] (%s) %s", i, len(to_summarize), template_id, paper["title"][:60]
+        )
         try:
-            summary = summarizer.summarize_paper(
-                paper, provider, model, template_id, profile
-            )
+            summary = summarizer.summarize_paper(paper, provider, model, template_id, profile)
             new_cache_entries[
                 summary_cache.cache_key(paper["canonical_id"], content_fingerprint)
             ] = summary_cache.entry(
@@ -902,7 +922,9 @@ def _summarize_selected_related_work(
                 generated=today_str,
             )
         except subprocess.CalledProcessError as e:
-            reason = (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
+            reason = (
+                (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
+            )
             log.error("Failed: %s — %s", paper["canonical_id"], reason)
             summary = f'_"(summary failed: {reason})"_'
             failures += 1
@@ -1007,16 +1029,16 @@ def _summarize_zotero_papers(
     for i, paper in enumerate(papers, 1):
         template_id = paper.get("template", default_template)
         try:
-            content_fingerprint = _summary_fingerprint(
-                paper, template_id, provider, model, profile
-            )
+            content_fingerprint = _summary_fingerprint(paper, template_id, provider, model, profile)
         except summarizer.PdfTextExtractionError as exc:
             log.error("Failed: %s — %s", paper["canonical_id"], exc)
             pairs.append((paper, f'_"(summary failed: {exc})"_'))
             failures += 1
             continue
-        cached = None if args.refresh_summaries else summary_cache.lookup(
-            cache, paper, content_fingerprint
+        cached = (
+            None
+            if args.refresh_summaries
+            else summary_cache.lookup(cache, paper, content_fingerprint)
         )
         if cached is not None:
             log.info("Cached [%d/%d] (%s) %s", i, len(papers), template_id, paper["title"][:60])
@@ -1024,7 +1046,9 @@ def _summarize_zotero_papers(
             continue
 
         pdf_path = Path(paper["pdf_path"])
-        log.info("Summarizing PDF [%d/%d] (%s) %s", i, len(papers), template_id, paper["title"][:60])
+        log.info(
+            "Summarizing PDF [%d/%d] (%s) %s", i, len(papers), template_id, paper["title"][:60]
+        )
         try:
             summary = summarizer.summarize_paper(
                 paper,
@@ -1046,7 +1070,9 @@ def _summarize_zotero_papers(
                 generated=today_str,
             )
         except subprocess.CalledProcessError as e:
-            reason = (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
+            reason = (
+                (e.stderr or "").strip().splitlines()[-1] if e.stderr else f"exit {e.returncode}"
+            )
             log.error("Failed: %s — %s", paper["canonical_id"], reason)
             summary = f'_"(summary failed: {reason})"_'
             failures += 1
@@ -1134,9 +1160,11 @@ def main(argv: list[str] | None = None) -> int:
                         "--zotero-collection to use one."
                     )
                     log.error(
-                        "Template %r needs %s evidence, but this run supplies "
-                        "%s. %s",
-                        template_override, template.evidence, wanted, hint,
+                        "Template %r needs %s evidence, but this run supplies %s. %s",
+                        template_override,
+                        template.evidence,
+                        wanted,
+                        hint,
                     )
                     return 2
         except config.ConfigError as exc:
@@ -1200,38 +1228,38 @@ def main(argv: list[str] | None = None) -> int:
 def _print_paper_list(papers: list[dict], profile: config.ProjectProfile | None = None) -> None:
     """Pretty-print the no-summarize paper list with bold titles and dim metadata."""
     use_color = sys.stdout.isatty()
-    BOLD   = "\033[1m"  if use_color else ""
-    DIM    = "\033[2m"  if use_color else ""
-    CYAN   = "\033[36m" if use_color else ""
-    GREEN  = "\033[32m" if use_color else ""
-    YELLOW = "\033[33m" if use_color else ""
-    RED    = "\033[31m" if use_color else ""
-    RESET  = "\033[0m"  if use_color else ""
+    bold = "\033[1m" if use_color else ""
+    dim = "\033[2m" if use_color else ""
+    cyan = "\033[36m" if use_color else ""
+    green = "\033[32m" if use_color else ""
+    yellow = "\033[33m" if use_color else ""
+    red = "\033[31m" if use_color else ""
+    reset = "\033[0m" if use_color else ""
 
     if profile:
         print(f"\n# {profile.name}")
 
     if not papers:
-        print(f"{DIM}(no papers matched){RESET}")
+        print(f"{dim}(no papers matched){reset}")
         return
 
     for p in sorted(papers, key=lambda x: -(x.get("relevance_score") or 0)):
         score = p.get("relevance_score") or 0.0
         if score >= 0.75:
-            score_color = GREEN
+            score_color = green
         elif score >= 0.65:
-            score_color = CYAN
+            score_color = cyan
         elif score >= 0.55:
-            score_color = YELLOW
+            score_color = yellow
         else:
-            score_color = RED
+            score_color = red
 
         venue = p.get("venue")
         container = p.get("container_title")
         if venue:
-            title_suffix = f"  {CYAN}★ {venue}{RESET}"
+            title_suffix = f"  {cyan}★ {venue}{reset}"
         elif container:
-            title_suffix = f"  {CYAN}{container}{RESET}"
+            title_suffix = f"  {cyan}{container}{reset}"
         else:
             title_suffix = ""
         published = p.get("published") or "?"
@@ -1239,8 +1267,8 @@ def _print_paper_list(papers: list[dict], profile: config.ProjectProfile | None 
         venue_meta = container or venue or "—"
 
         print()
-        print(f"  {score_color}{score:.3f}{RESET}  {BOLD}{p['title']}{RESET}{title_suffix}")
-        print(f"        {DIM}{p['source']} · {venue_meta} · {published} · {url}{RESET}")
+        print(f"  {score_color}{score:.3f}{reset}  {bold}{p['title']}{reset}{title_suffix}")
+        print(f"        {dim}{p['source']} · {venue_meta} · {published} · {url}{reset}")
     print()
 
 

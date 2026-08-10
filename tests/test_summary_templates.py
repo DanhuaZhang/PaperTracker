@@ -101,9 +101,7 @@ def test_discover_rejects_a_duplicate_id_across_folders(tmp_path):
         ),
     ],
 )
-def test_discover_reports_validation_failures_with_paths(
-    tmp_path, filename, content, message
-):
+def test_discover_reports_validation_failures_with_paths(tmp_path, filename, content, message):
     _make_tree(tmp_path)
     path = tmp_path / "abstract" / filename
     path.write_text(content, encoding="utf-8")

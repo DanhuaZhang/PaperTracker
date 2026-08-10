@@ -6,7 +6,7 @@ def test_recover_abstract_uses_ordered_fallbacks_and_stops(monkeypatch):
 
     def empty(doi):
         calls.append("openalex")
-        return None
+        return
 
     def semantic(doi):
         calls.append("semantic_scholar")
@@ -101,4 +101,3 @@ def test_enrichment_continues_after_provider_failure(monkeypatch):
 
     assert result["dblp_key"] == "conf/test/key"
     assert result["metadata_sources"] == ["dblp"]
-

@@ -1,12 +1,13 @@
 """Markdown rendering of the daily digest."""
+
 from __future__ import annotations
 
-from collections import defaultdict
 import json
 import os
-from pathlib import Path
 import re
 import tempfile
+from collections import defaultdict
+from pathlib import Path
 
 from . import config, related_work
 
@@ -46,7 +47,9 @@ def render_digest(
     ]
 
     # Priority venues first
-    venue_names = [v["name"] for v in (profile.priority_venues if profile else config.PRIORITY_VENUES)]
+    venue_names = [
+        v["name"] for v in (profile.priority_venues if profile else config.PRIORITY_VENUES)
+    ]
     for vname in venue_names:
         if vname in by_section:
             lines.append(f"## ★ {vname}")
@@ -83,7 +86,7 @@ def render_zotero_collection_digest(
     profile: config.ProjectProfile,
 ) -> str:
     lines = [
-        f"# PaperTracker Zotero Batch - {profile.name} - {collection_path} - {date_str}",
+        f"# PaperTracker Zotero Batch — {profile.name} — {collection_path} — {date_str}",
         "",
         f"> Auto-generated from {len(papers_with_summaries)} local Zotero PDF(s).",
         "",
@@ -105,7 +108,8 @@ def render_related_work_digest(
     lines = [
         f"# PaperTracker Related Work — {profile.name} — {date_str}",
         "",
-        f"> Auto-generated. {len(papers_with_summaries)} related paper(s) ranked by topic relevance and citation signal.",
+        f"> Auto-generated. {len(papers_with_summaries)} related paper(s) "
+        "ranked by topic relevance and citation signal.",
         "",
     ]
     if not papers_with_summaries:
@@ -124,9 +128,10 @@ def render_faceted_related_work_matrix(
     profile: config.ProjectProfile,
 ) -> str:
     lines = [
-        f"# PaperTracker Related Work Facets - {profile.name} - {date_str}",
+        f"# PaperTracker Related Work Facets — {profile.name} — {date_str}",
         "",
-        f"> Auto-generated candidate matrix. {len(candidates)} paper(s) curated from OpenAlex metadata and abstracts.",
+        f"> Auto-generated candidate matrix. {len(candidates)} paper(s) curated "
+        "from OpenAlex metadata and abstracts.",
         "",
         "## Suggested section order",
         "",
@@ -254,9 +259,7 @@ def merge_daily_digests(existing: str, update: str) -> str:
             section_index[heading] = len(sections)
             sections.append((heading, body))
     rendered = prefix.rstrip() + "\n\n"
-    rendered += "\n\n".join(
-        f"## {heading}\n{body.strip()}" for heading, body in sections
-    )
+    rendered += "\n\n".join(f"## {heading}\n{body.strip()}" for heading, body in sections)
     return rendered.rstrip() + "\n"
 
 
@@ -264,11 +267,11 @@ def _split_sections(content: str) -> tuple[str, list[tuple[str, str]]]:
     matches = list(_SECTION_RE.finditer(content))
     if not matches:
         return content, []
-    prefix = content[:matches[0].start()]
+    prefix = content[: matches[0].start()]
     sections: list[tuple[str, str]] = []
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
-        sections.append((match.group("heading"), content[match.end():end]))
+        sections.append((match.group("heading"), content[match.end() : end]))
     return prefix, sections
 
 
@@ -304,7 +307,7 @@ def _atomic_write_text(path: Path, content: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
             temporary_path = Path(handle.name)
-        os.replace(temporary_path, path)
+        temporary_path.replace(path)
     finally:
         if temporary_path is not None and temporary_path.exists():
             temporary_path.unlink()
@@ -312,10 +315,12 @@ def _atomic_write_text(path: Path, content: str) -> None:
 
 def _render_facet_row(paper: dict) -> str:
     title = _md_escape(paper.get("title") or "(untitled)")
-    year = _md_escape(_year(paper) or "n/a")
+    year = _md_escape(related_work.publication_year(paper) or "n/a")
     venue = _md_escape(paper.get("container_title") or paper.get("venue") or "n/a")
     authors = paper.get("authors") or []
-    author_str = ", ".join(authors[:3]) + (f" et al. ({len(authors)} authors)" if len(authors) > 3 else "")
+    author_str = ", ".join(authors[:3]) + (
+        f" et al. ({len(authors)} authors)" if len(authors) > 3 else ""
+    )
     author_str = _md_escape(author_str or "authors unknown")
     link_text = paper.get("doi") or paper.get("openalex_id") or paper.get("canonical_id") or "link"
     link_url = paper.get("url") or "#"
@@ -337,13 +342,6 @@ def _render_facet_row(paper: dict) -> str:
 
 def _md_escape(text: str) -> str:
     return str(text).replace("|", "\\|").replace("\n", " ").strip()
-
-
-def _year(paper: dict) -> str:
-    published = str(paper.get("published") or "")
-    if len(published) >= 4 and published[:4].isdigit():
-        return published[:4]
-    return ""
 
 
 def _render_related_paper(index: int, paper: dict, summary: str | None) -> list[str]:
@@ -418,10 +416,12 @@ def _render_paper(paper: dict, summary: str) -> list[str]:
     container = paper.get("container_title")
     if container:
         lines.append(f"**Venue:** {container}  ")
-    lines.extend([
-        f"**Published:** {paper.get('published') or 'n/a'}  ",
-        f"**Link:** [{link_text}]({link_url})",
-    ])
+    lines.extend(
+        [
+            f"**Published:** {paper.get('published') or 'n/a'}  ",
+            f"**Link:** [{link_text}]({link_url})",
+        ]
+    )
     if paper.get("oa_url"):
         lines.append(f"**Open access:** [PDF/repository]({paper['oa_url']})  ")
     if "cited_by_count" in paper:

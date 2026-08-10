@@ -1,4 +1,5 @@
 """One effort scale, forwarded verbatim to whichever provider runs."""
+
 import importlib
 from unittest import mock
 
@@ -51,9 +52,7 @@ def test_precedence_runs_cli_env_config_then_builtin(monkeypatch, tmp_path):
         ("env var PAPERTRACKER_EFFORT", lambda: settings.resolve_effort(None)),
     ],
 )
-def test_every_layer_rejects_an_unsupported_level_by_name(
-    monkeypatch, tmp_path, source, call
-):
+def test_every_layer_rejects_an_unsupported_level_by_name(monkeypatch, tmp_path, source, call):
     _isolate(monkeypatch, tmp_path)
     monkeypatch.setenv("PAPERTRACKER_EFFORT", "ultra")
 
@@ -100,9 +99,7 @@ def test_each_level_reaches_both_providers_under_the_same_name(effort):
 
         summarizer._summarize_codex("prompt", "gpt-5.6-luna")
         codex_cmd = run.call_args.args[0]
-        assert codex_cmd[codex_cmd.index("-c") + 1] == (
-            f'model_reasoning_effort="{effort}"'
-        )
+        assert codex_cmd[codex_cmd.index("-c") + 1] == (f'model_reasoning_effort="{effort}"')
 
 
 def test_inherit_sends_no_effort_flag_to_either_provider():

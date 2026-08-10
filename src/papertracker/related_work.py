@@ -1,10 +1,11 @@
 """Facet-aware related-work curation helpers."""
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
 import math
 import re
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -143,7 +144,9 @@ def rank_facet_candidates(
     facet_scores_by_id: dict[str, list[relevance.RelevanceScore]] = {}
     for facet in facets:
         facet_topic = f"{facet.name}. {facet.description}. {facet.query_hint}"
-        facet_scores_by_id[facet.id] = relevance.score_texts(facet_topic, paper_texts, **score_kwargs)
+        facet_scores_by_id[facet.id] = relevance.score_texts(
+            facet_topic, paper_texts, **score_kwargs
+        )
 
     ranked_by_facet: dict[str, list[dict]] = {facet.id: [] for facet in facets}
     facet_lookup = {facet.id: facet for facet in facets}
@@ -169,7 +172,9 @@ def rank_facet_candidates(
             facet_score = facet_scores_by_id[facet_id][idx]
             facet_rel = facet_score.final_score
             project_rel = project_scores[idx].final_score
-            discovery_sources = set(facet_hits.get(facet_id) or paper.get("discovery_sources") or [])
+            discovery_sources = set(
+                facet_hits.get(facet_id) or paper.get("discovery_sources") or []
+            )
             source_bonus = min(max(len(discovery_sources) - 1, 0), 2) * 0.035
             multifacet_bonus = min(max(len(facet_hits) - 1, 0), 3) * 0.025
             hit_bonus = 0.04 if facet_id in facet_hits else 0.0
@@ -224,7 +229,7 @@ def annotate_candidates(
             {
                 "canonical_id": paper.get("canonical_id"),
                 "title": paper.get("title"),
-                "year": _year(paper),
+                "year": publication_year(paper),
                 "venue": paper.get("container_title") or paper.get("venue"),
                 "authors": paper.get("authors") or [],
                 "primary_facet": paper.get("primary_facet"),
@@ -265,10 +270,9 @@ JSON input:
         ann = by_id.get(str(paper.get("canonical_id"))) or {}
         annotated["role"] = _normalize_role(ann.get("role"))
         annotated["why_cite"] = _clean_sentence(ann.get("why_cite")) or _default_why_cite(paper)
-        annotated["difference_from_contribution"] = (
-            _clean_sentence(ann.get("difference_from_contribution"))
-            or _default_difference(profile)
-        )
+        annotated["difference_from_contribution"] = _clean_sentence(
+            ann.get("difference_from_contribution")
+        ) or _default_difference(profile)
         annotated["evidence_basis"] = _normalize_evidence(
             ann.get("evidence_basis"),
             has_abstract=bool((paper.get("abstract") or "").strip()),
@@ -319,7 +323,7 @@ def candidate_to_jsonable(paper: dict) -> dict:
         "canonical_id": paper.get("canonical_id"),
         "title": paper.get("title"),
         "authors": paper.get("authors") or [],
-        "year": _year(paper),
+        "year": publication_year(paper),
         "published": paper.get("published") or "",
         "venue": paper.get("container_title") or paper.get("venue"),
         "doi": paper.get("doi") or "",
@@ -353,7 +357,7 @@ def _round_robin_unique(ranked_by_facet: dict[str, list[dict]], limit: int) -> l
     selected: list[dict] = []
     seen: set[str] = set()
     facet_ids = list(ranked_by_facet)
-    indices = {facet_id: 0 for facet_id in facet_ids}
+    indices = dict.fromkeys(facet_ids, 0)
     while len(selected) < limit:
         added = False
         for facet_id in facet_ids:
@@ -445,7 +449,12 @@ def _slug(raw: str) -> str:
     return slug or "facet"
 
 
-def _year(paper: dict) -> str:
+def publication_year(paper: dict) -> str:
+    """Leading year of a paper's ``published`` date, or "" when it has none.
+
+    Public because digest_writer renders the same field; this module is a leaf,
+    so it is the one both sides can import without a cycle.
+    """
     published = str(paper.get("published") or "")
     if len(published) >= 4 and published[:4].isdigit():
         return published[:4]

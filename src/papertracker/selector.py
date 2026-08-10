@@ -5,13 +5,14 @@ titles wrap in full, abstracts are visible, and clicking a card toggles it. The
 browser POSTs the chosen papers back to the waiting process. When stdin is not a
 TTY (pipes, CI) it falls back to a numbered text prompt. No third-party deps.
 """
+
 from __future__ import annotations
 
 import html
 import http.server
-from pathlib import Path
 import sys
 import webbrowser
+from pathlib import Path
 from urllib.parse import parse_qs
 
 from . import summary_templates
@@ -49,7 +50,7 @@ def _score_hex(score: float) -> str:
         return "#39c5cf"  # cyan
     if score >= 0.55:
         return "#d29922"  # yellow
-    return "#f85149"      # red
+    return "#f85149"  # red
 
 
 def _ordered(papers: list[dict]) -> list[dict]:
@@ -65,7 +66,8 @@ def _meta(paper: dict) -> str:
 
 def select_papers(
     papers: list[dict],
-    templates: list[summary_templates.SummaryTemplate] | tuple[summary_templates.SummaryTemplate, ...],
+    templates: list[summary_templates.SummaryTemplate]
+    | tuple[summary_templates.SummaryTemplate, ...],
     default_template: str,
 ) -> list[dict]:
     """Return the subset the user picks, in relevance-sorted order."""
@@ -98,6 +100,7 @@ def select_related_work_candidates(papers: list[dict], facets: list) -> list[dic
 # --------------------------------------------------------------------------- #
 # HTML (localhost server) path
 # --------------------------------------------------------------------------- #
+
 
 def _selections_from_form(
     form: dict[str, list[str]],
@@ -247,9 +250,7 @@ def _make_related_server(ordered: list[dict], facets: list, page: str):
     return httpd, result
 
 
-def _select_html(
-    ordered: list[dict], templates, default_template: str
-) -> list[dict]:
+def _select_html(ordered: list[dict], templates, default_template: str) -> list[dict]:
     page = _render_html(ordered, templates, default_template)
     httpd, result = _make_server(ordered, page, templates, default_template)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
@@ -265,7 +266,7 @@ def _select_html(
     finally:
         httpd.server_close()
     out = []
-    for i, template_id in (result["selected"] or []):
+    for i, template_id in result["selected"] or []:
         paper = dict(ordered[i])
         paper["template"] = template_id
         out.append(paper)
@@ -354,14 +355,14 @@ def _blocker(template: summary_templates.SummaryTemplate) -> str:
     return "no abstract available"
 
 
-def _card(
-    i: int, paper: dict, templates, default_template: str
-) -> str:
+def _card(i: int, paper: dict, templates, default_template: str) -> str:
     score = paper.get("relevance_score") or 0.0
     title = html.escape(paper.get("title") or "(untitled)")
     authors = paper.get("authors") or []
     if authors:
-        author_str = ", ".join(authors[:4]) + (f" +{len(authors) - 4} more" if len(authors) > 4 else "")
+        author_str = ", ".join(authors[:4]) + (
+            f" +{len(authors) - 4} more" if len(authors) > 4 else ""
+        )
     else:
         author_str = "(authors unknown)"
     meta = html.escape(f"{author_str} · {_meta(paper)}")
@@ -396,32 +397,32 @@ def _card(
         option_title = description if compatible else f"{description} {reason}".strip()
         template_options += (
             f'<option value="{html.escape(template.id, quote=True)}"'
-            f'{" selected" if template.id == selected_id else ""}'
-            f'{" disabled" if not compatible else ""}'
+            f"{' selected' if template.id == selected_id else ''}"
+            f"{' disabled' if not compatible else ''}"
             f' data-evidence="{html.escape(template.evidence, quote=True)}"'
             f' title="{html.escape(option_title, quote=True)}">'
-            f'{html.escape(option_text)}</option>'
+            f"{html.escape(option_text)}</option>"
         )
     return (
         f'<label class="card">'
         f'<div class="pick">'
         f'<input type="checkbox" name="sel" value="{i}">'
         f'<select name="template_{i}" class="select-control" onclick="event.stopPropagation()">'
-        f'{template_options}</select>'
-        f'</div>'
+        f"{template_options}</select>"
+        f"</div>"
         f'<div class="body">'
         f'<div class="title">{title}</div>'
         f'<div class="meta">'
         f'<span class="score" style="background:{_score_hex(score)}">{score:.3f}</span>'
-        f'<span>{meta}</span>'
-        f'</div>'
+        f"<span>{meta}</span>"
+        f"</div>"
         f'<details onclick="event.stopPropagation()">'
-        f'<summary>Abstract</summary>'
+        f"<summary>Abstract</summary>"
         f'<div class="abstract">{abstract}</div>'
-        f'</details>'
+        f"</details>"
         f'<a class="link" href="{url}" target="_blank" rel="noopener" '
         f'onclick="event.stopPropagation()">Open paper ↗</a>'
-        f'</div></label>'
+        f"</div></label>"
     )
 
 
@@ -437,13 +438,13 @@ def _related_card(i: int, paper: dict, facets: list) -> str:
     evidence = html.escape(paper.get("evidence_basis") or "metadata-only")
     facet_options = "".join(
         f'<option value="{html.escape(facet.id, quote=True)}"'
-        f'{" selected" if facet.id == paper.get("primary_facet") else ""}>'
-        f'{html.escape(facet.name)}</option>'
+        f"{' selected' if facet.id == paper.get('primary_facet') else ''}>"
+        f"{html.escape(facet.name)}</option>"
         for facet in facets
     )
     role_options = "".join(
         f'<option value="{role}"{" selected" if role == (paper.get("role") or "background") else ""}>'
-        f'{role.title()}</option>'
+        f"{role.title()}</option>"
         for role in (
             "foundational",
             "method",
@@ -459,34 +460,31 @@ def _related_card(i: int, paper: dict, facets: list) -> str:
         f'<label class="card">'
         f'<div class="pick">'
         f'<input type="checkbox" name="sel" value="{i}" checked>'
-        f'</div>'
+        f"</div>"
         f'<div class="body">'
         f'<div class="title">{title}</div>'
         f'<div class="meta">'
         f'<span class="score" style="background:{_score_hex(score)}">{score:.3f}</span>'
-        f'<span>{meta}</span><span>Basis: {evidence}</span>'
-        f'</div>'
+        f"<span>{meta}</span><span>Basis: {evidence}</span>"
+        f"</div>"
         f'<div class="controls">'
         f'<select name="facet_{i}" class="select-control" onclick="event.stopPropagation()">{facet_options}</select>'
         f'<select name="role_{i}" class="select-control" onclick="event.stopPropagation()">{role_options}</select>'
-        f'</div>'
+        f"</div>"
         f'<p class="annotation"><b>Why cite:</b> {why}</p>'
         f'<p class="annotation"><b>Differs:</b> {diff}</p>'
         f'<a class="link" href="{url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open paper ↗</a>'
-        f'</div></label>'
+        f"</div></label>"
     )
 
 
-def _render_html(
-    ordered: list[dict], templates, default_template: str
-) -> str:
+def _render_html(ordered: list[dict], templates, default_template: str) -> str:
     cards = "\n".join(
-        _card(i, paper, templates, default_template)
-        for i, paper in enumerate(ordered)
+        _card(i, paper, templates, default_template) for i, paper in enumerate(ordered)
     )
     header = (
-        '<header>'
-        '<h1>PaperTracker — select papers to summarize</h1>'
+        "<header>"
+        "<h1>PaperTracker — select papers to summarize</h1>"
         '<div class="toolbar">'
         '<button type="button" id="all">Select all</button>'
         '<button type="button" id="none">Select none</button>'
@@ -494,14 +492,14 @@ def _render_html(
         '<span class="spacer"></span>'
         '<button type="submit" name="cancel" value="1" class="cancel">Cancel</button>'
         '<button type="submit" class="go">Summarize selected →</button>'
-        '</div></header>'
+        "</div></header>"
     )
     return (
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>PaperTracker — {len(ordered)} papers</title>"
         f"<style>{_CSS}</style></head><body>"
-        "<form method=\"post\" action=\"/\">"
+        '<form method="post" action="/">'
         f"{header}<main>{cards}</main></form>"
         f"<script>{_SCRIPT}</script>"
         "</body></html>"
@@ -511,8 +509,8 @@ def _render_html(
 def _render_related_html(ordered: list[dict], facets: list) -> str:
     cards = "\n".join(_related_card(i, p, facets) for i, p in enumerate(ordered))
     header = (
-        '<header>'
-        '<h1>PaperTracker — approve related-work bibliography</h1>'
+        "<header>"
+        "<h1>PaperTracker — approve related-work bibliography</h1>"
         '<div class="toolbar">'
         '<button type="button" id="all">Select all</button>'
         '<button type="button" id="none">Select none</button>'
@@ -520,18 +518,21 @@ def _render_related_html(ordered: list[dict], facets: list) -> str:
         '<span class="spacer"></span>'
         '<button type="submit" name="cancel" value="1" class="cancel">Cancel</button>'
         '<button type="submit" class="go">Save selection →</button>'
-        '</div></header>'
+        "</div></header>"
     )
-    css = _CSS + """
+    css = (
+        _CSS
+        + """
 .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .annotation{margin:8px 0 0;color:#c9d1d9;font-size:13.5px}
 """
+    )
     return (
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>PaperTracker — {len(ordered)} candidates</title>"
         f"<style>{css}</style></head><body>"
-        "<form method=\"post\" action=\"/\">"
+        '<form method="post" action="/">'
         f"{header}<main>{cards}</main></form>"
         f"<script>{_SCRIPT}</script>"
         "</body></html>"
@@ -540,11 +541,11 @@ def _render_related_html(ordered: list[dict], facets: list) -> str:
 
 def _done_html(n: int) -> str:
     return (
-        "<!doctype html><meta charset=\"utf-8\"><title>PaperTracker</title>"
-        "<body style=\"font-family:-apple-system,sans-serif;background:#0d1117;color:#e6edf3;"
-        "display:flex;height:100vh;margin:0;align-items:center;justify-content:center;text-align:center\">"
+        '<!doctype html><meta charset="utf-8"><title>PaperTracker</title>'
+        '<body style="font-family:-apple-system,sans-serif;background:#0d1117;color:#e6edf3;'
+        'display:flex;height:100vh;margin:0;align-items:center;justify-content:center;text-align:center">'
         f"<div><h1>✓ {n} paper(s) selected</h1>"
-        "<p style=\"color:#8b949e\">You can close this tab and return to the terminal.</p></div>"
+        '<p style="color:#8b949e">You can close this tab and return to the terminal.</p></div>'
     )
 
 
@@ -552,9 +553,8 @@ def _done_html(n: int) -> str:
 # Non-TTY text fallback
 # --------------------------------------------------------------------------- #
 
-def _select_fallback(
-    ordered: list[dict], templates, default_template: str
-) -> list[dict]:
+
+def _select_fallback(ordered: list[dict], templates, default_template: str) -> list[dict]:
     use_color = sys.stdout.isatty()
     bold = BOLD if use_color else ""
     dim = DIM if use_color else ""

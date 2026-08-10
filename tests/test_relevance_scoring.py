@@ -25,7 +25,9 @@ def test_model_clears_managed_cache_and_retries_when_fastembed_snapshot_is_incom
     def fake_text_embedding(**kwargs):
         attempts.append(kwargs)
         if len(attempts) == 1:
-            raise RuntimeError("Load model from /tmp/fastembed_cache/model_optimized.onnx failed. File doesn't exist")
+            raise RuntimeError(
+                "Load model from /tmp/fastembed_cache/model_optimized.onnx failed. File doesn't exist"
+            )
         return sentinel
 
     monkeypatch.delenv("FASTEMBED_CACHE_PATH", raising=False)

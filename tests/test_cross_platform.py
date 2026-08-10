@@ -3,10 +3,12 @@
 Every test here runs on all three platforms; each one covers a bug that is
 invisible on macOS and fatal on Windows.
 """
+
 import os
 import sqlite3
 import stat
 import sys
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -36,9 +38,7 @@ def _same_path(a, b) -> bool:
 
 
 @pytest.mark.parametrize("provider", ["claude", "codex"])
-def test_a_provider_on_path_is_spawned_by_full_path_not_bare_name(
-    provider, monkeypatch, tmp_path
-):
+def test_a_provider_on_path_is_spawned_by_full_path_not_bare_name(provider, monkeypatch, tmp_path):
     """The Windows shim bug: which() finds claude.cmd, CreateProcess never does."""
     expected = _fake_cli(tmp_path, provider)
     monkeypatch.setenv("PATH", str(tmp_path))
@@ -47,13 +47,11 @@ def test_a_provider_on_path_is_spawned_by_full_path_not_bare_name(
 
     assert _same_path(resolved, expected)
     assert resolved != provider, "a bare name is not resolvable by CreateProcess"
-    assert os.path.isabs(resolved), "subprocess needs a path, not a lookup"
+    assert Path(resolved).is_absolute(), "subprocess needs a path, not a lookup"
 
 
 @pytest.mark.parametrize("provider", ["claude", "codex"])
-def test_a_missing_provider_falls_back_so_preflight_owns_the_error(
-    provider, monkeypatch, tmp_path
-):
+def test_a_missing_provider_falls_back_so_preflight_owns_the_error(provider, monkeypatch, tmp_path):
     """One place reports "not installed", and it is not the argv builder."""
     monkeypatch.setenv("PATH", str(tmp_path))
 
@@ -117,5 +115,9 @@ def test_every_shipped_template_is_stored_with_unix_newlines():
     """.gitattributes pins this; a CRLF template would reach the model prompt."""
     from papertracker import config
 
-    for template in sorted(config.summary_template_directory().glob("*.md")):
+    # rglob, not glob: templates sit one level down in abstract/ and fulltext/,
+    # so a top-level glob matches nothing and the loop below asserts nothing.
+    templates = sorted(config.summary_template_directory().rglob("*.md"))
+    assert templates, "found no templates to check — the layout moved again"
+    for template in templates:
         assert b"\r\n" not in template.read_bytes(), f"{template.name} has CRLF"

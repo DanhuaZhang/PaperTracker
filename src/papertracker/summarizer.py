@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import logging
-from pathlib import Path
 import shutil
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
 
 from . import config, summary_templates
 
@@ -76,8 +76,7 @@ def preflight(provider: str) -> None:
     binary = binary_for(provider)
     if shutil.which(binary) is None:
         hint = (
-            "Install Claude Code from https://claude.com/code and run "
-            "'claude auth login'."
+            "Install Claude Code from https://claude.com/code and run 'claude auth login'."
             if provider == "claude"
             else "Install Codex CLI from https://developers.openai.com/codex/cli "
             "and run 'codex login'."
@@ -207,9 +206,7 @@ def summarize_paper(
         prompt = _notes_prompt(paper, template, profile, chunk, index, len(evidence.chunks))
         notes.append(_invoke(provider, model, prompt))
 
-    consolidated = _consolidate_notes(
-        paper, template, profile, provider, model, notes
-    )
+    consolidated = _consolidate_notes(paper, template, profile, provider, model, notes)
     prompt, _ = build_prompt(
         paper,
         template.id,
@@ -308,10 +305,9 @@ def _pack_text_blocks(blocks: list[str], limit: int) -> list[str]:
             bounded.append(block)
             continue
         piece_limit = max(1, limit - 80)
-        pieces = [block[i:i + piece_limit] for i in range(0, len(block), piece_limit)]
+        pieces = [block[i : i + piece_limit] for i in range(0, len(block), piece_limit)]
         bounded.extend(
-            f"[Split note {index}/{len(pieces)}]\n{piece}"
-            for index, piece in enumerate(pieces, 1)
+            f"[Split note {index}/{len(pieces)}]\n{piece}" for index, piece in enumerate(pieces, 1)
         )
 
     groups: list[str] = []
@@ -348,9 +344,7 @@ def extract_pdf_evidence(
     try:
         from pypdf import PdfReader
     except ImportError as exc:
-        raise PdfTextExtractionError(
-            "pypdf is required for full-text PDF summaries"
-        ) from exc
+        raise PdfTextExtractionError("pypdf is required for full-text PDF summaries") from exc
 
     try:
         reader = PdfReader(str(pdf_path))
@@ -363,7 +357,7 @@ def extract_pdf_evidence(
     for page_number, page in enumerate(reader.pages, 1):
         try:
             page_text = (page.extract_text() or "").strip()
-        except Exception as exc:  # a bad page must not hide text from other pages
+        except Exception as exc:  # noqa: BLE001 — a bad page must not hide text from other pages
             log.warning("PDF page %d/%d extraction failed: %s", page_number, total_pages, exc)
             page_text = ""
         log.debug(
@@ -378,9 +372,7 @@ def extract_pdf_evidence(
         page_blocks.extend(_page_blocks(page_number, page_text, chunk_char_limit))
 
     if not extractable_pages:
-        raise PdfTextExtractionError(
-            f"no extractable text found in {pdf_path}; OCR required"
-        )
+        raise PdfTextExtractionError(f"no extractable text found in {pdf_path}; OCR required")
     if len(extractable_pages) < total_pages:
         log.warning(
             "PDF text is partial for %s: %d/%d pages contained extractable text; "
@@ -410,7 +402,7 @@ def _page_blocks(page_number: int, text: str, limit: int) -> list[str]:
     if len(base_label) + len(text) <= limit:
         return [base_label + text]
     payload_limit = max(1, limit - len(f"[Page {page_number}, part 9999/9999]\n"))
-    pieces = [text[i:i + payload_limit] for i in range(0, len(text), payload_limit)]
+    pieces = [text[i : i + payload_limit] for i in range(0, len(text), payload_limit)]
     return [
         f"[Page {page_number}, part {index}/{len(pieces)}]\n{piece}"
         for index, piece in enumerate(pieces, 1)

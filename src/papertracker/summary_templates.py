@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import re
 import tomllib
+from dataclasses import dataclass
+from pathlib import Path
 
 from . import config
-
 
 TEMPLATE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 EVIDENCE_TYPES = frozenset({"abstract", "fulltext"})
@@ -85,9 +84,7 @@ def discover(
                 f"Could not read summary template directory {subdir}: {exc}"
             ) from exc
         if not found:
-            raise config.ConfigError(
-                f"Summary template folder contains no .md templates: {subdir}"
-            )
+            raise config.ConfigError(f"Summary template folder contains no .md templates: {subdir}")
         paths.extend((evidence, path) for path in found)
 
     templates: list[SummaryTemplate] = []
@@ -101,8 +98,7 @@ def discover(
             )
         if template_id in seen_ids:
             raise config.ConfigError(
-                f"Duplicate summary template ID {template_id!r}: "
-                f"{seen_ids[template_id]} and {path}"
+                f"Duplicate summary template ID {template_id!r}: {seen_ids[template_id]} and {path}"
             )
         seen_ids[template_id] = path
         template = _parse_template(template_id, path)
@@ -120,8 +116,7 @@ def discover(
         default = by_id.get(default_id)
         if default is None:
             raise config.ConfigError(
-                f"Configured default summary template {default_id!r} was not found in "
-                f"{directory}"
+                f"Configured default summary template {default_id!r} was not found in {directory}"
             )
     return tuple(templates), default
 
@@ -152,26 +147,21 @@ def _parse_template(template_id: str, path: Path) -> SummaryTemplate:
     try:
         metadata = tomllib.loads(match.group("metadata"))
     except tomllib.TOMLDecodeError as exc:
-        raise config.ConfigError(
-            f"Malformed summary template metadata in {path}: {exc}"
-        ) from exc
+        raise config.ConfigError(f"Malformed summary template metadata in {path}: {exc}") from exc
     missing = sorted(_REQUIRED_METADATA - metadata.keys())
     unknown = sorted(metadata.keys() - _REQUIRED_METADATA)
     if missing:
         raise config.ConfigError(
-            f"Malformed summary template metadata in {path}: missing "
-            f"{', '.join(missing)}"
+            f"Malformed summary template metadata in {path}: missing {', '.join(missing)}"
         )
     if unknown:
         raise config.ConfigError(
-            f"Malformed summary template metadata in {path}: unsupported keys "
-            f"{', '.join(unknown)}"
+            f"Malformed summary template metadata in {path}: unsupported keys {', '.join(unknown)}"
         )
     for key in _REQUIRED_METADATA:
         if not isinstance(metadata[key], str) or not metadata[key].strip():
             raise config.ConfigError(
-                f"Malformed summary template metadata in {path}: {key} must be a "
-                "non-empty string"
+                f"Malformed summary template metadata in {path}: {key} must be a non-empty string"
             )
     evidence = metadata["evidence"].strip()
     if evidence not in EVIDENCE_TYPES:
@@ -179,7 +169,7 @@ def _parse_template(template_id: str, path: Path) -> SummaryTemplate:
         raise config.ConfigError(
             f"Unsupported evidence value {evidence!r} in {path}; expected {choices}"
         )
-    body = raw[match.end():].strip()
+    body = raw[match.end() :].strip()
     if not body:
         raise config.ConfigError(f"Summary template body is empty: {path}")
     return SummaryTemplate(
@@ -200,11 +190,9 @@ def load(template: SummaryTemplate) -> str:
     try:
         raw = template.path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise config.ConfigError(
-            f"Could not read summary template {template.path}: {exc}"
-        ) from exc
+        raise config.ConfigError(f"Could not read summary template {template.path}: {exc}") from exc
     match = _HEADER_RE.match(raw)
-    return raw[match.end():].strip() if match else raw
+    return raw[match.end() :].strip() if match else raw
 
 
 def compatibility(template: SummaryTemplate, paper: dict) -> tuple[bool, str | None]:

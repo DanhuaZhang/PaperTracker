@@ -8,6 +8,7 @@ There is deliberately no per-user config file. Secrets belong in the
 environment, where they cannot be committed; every other setting belongs in
 `config.toml`, where one file explains a run.
 """
+
 from __future__ import annotations
 
 import os

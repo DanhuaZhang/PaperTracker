@@ -146,14 +146,19 @@ supported; always `uv run papertracker` from inside the clone.
 `uv sync` already installs the dev tooling.
 
 ```bash
-uv run pytest                       # full suite, no network, seconds
-uv run ruff check src tests scripts # lint
-uv build                            # the wheel/sdist build must succeed
+uv run pytest                              # full suite, no network, seconds
+uv run ruff check src tests scripts        # lint
+uv run ruff format src tests scripts       # layout — ruff owns it, not review
+uv build                                   # the wheel/sdist build must succeed
 ```
 
 `.github/workflows/ci.yml` runs those plus `uv sync --locked` on Ubuntu, macOS,
 and Windows. Tests are offline and stub every HTTP call — nothing in the suite
 touches arXiv, Crossref, HuggingFace, or an AI CLI.
+
+Style is settled by `[tool.ruff]` in `pyproject.toml` rather than by review;
+[CONTRIBUTING](CONTRIBUTING.md#code-style) explains the ruleset and the naming
+conventions the linter cannot check.
 
 See [CONTRIBUTING](CONTRIBUTING.md) before sending a change.
 

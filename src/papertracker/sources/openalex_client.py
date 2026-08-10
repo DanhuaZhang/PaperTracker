@@ -3,6 +3,7 @@
 OpenAlex stores abstracts as `abstract_inverted_index` mapping word -> [positions].
 We reconstruct the abstract by placing each word at every position and joining.
 """
+
 from __future__ import annotations
 
 import logging
@@ -99,7 +100,9 @@ def fetch_related_work_faceted(
     candidates_per_facet = max(1, candidates_per_facet)
     merged: dict[str, dict] = {}
     for facet in facets:
-        semantic_query = f"{profile.topic_statement.strip()} {facet.name} {facet.description}"[:2000]
+        semantic_query = f"{profile.topic_statement.strip()} {facet.name} {facet.description}"[
+            :2000
+        ]
         batches = [
             (
                 "semantic",
@@ -161,14 +164,14 @@ def _get_json(
             if resp.status_code not in (429, 503):
                 log.debug("OpenAlex %s -> %d", log_label, resp.status_code)
                 if raise_on_error:
-                    raise OpenAlexError(
-                        f"OpenAlex {log_label} returned HTTP {resp.status_code}"
-                    )
+                    raise OpenAlexError(f"OpenAlex {log_label} returned HTTP {resp.status_code}")
                 return None
             if attempt == _MAX_RETRIES - 1:
                 log.warning(
                     "OpenAlex %s -> %d after %d attempts; giving up",
-                    log_label, resp.status_code, _MAX_RETRIES,
+                    log_label,
+                    resp.status_code,
+                    _MAX_RETRIES,
                 )
                 if raise_on_error:
                     raise OpenAlexError(
@@ -177,10 +180,14 @@ def _get_json(
                     )
                 return None
             retry_after = resp.headers.get("Retry-After", "")
-            wait = float(retry_after) if retry_after.isdigit() else _BACKOFF_BASE_SEC * (2 ** attempt)
+            wait = float(retry_after) if retry_after.isdigit() else _BACKOFF_BASE_SEC * (2**attempt)
             log.warning(
                 "OpenAlex %s -> %d; backing off %.1fs (attempt %d/%d)",
-                log_label, resp.status_code, wait, attempt + 1, _MAX_RETRIES,
+                log_label,
+                resp.status_code,
+                wait,
+                attempt + 1,
+                _MAX_RETRIES,
             )
             time.sleep(wait)
         except (requests.RequestException, ValueError) as e:
@@ -271,7 +278,7 @@ def _normalize_doi(raw: str) -> str:
     doi = raw.strip().lower()
     for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
         if doi.startswith(prefix):
-            return doi[len(prefix):]
+            return doi[len(prefix) :]
     return doi
 
 

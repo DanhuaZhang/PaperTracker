@@ -63,9 +63,7 @@ def fingerprint(
         "pipeline_version": pipeline_version,
         "provider": provider,
         "model": model,
-        "paper_ids": sorted(
-            set(paper.get("merged_ids") or [paper.get("canonical_id") or ""])
-        ),
+        "paper_ids": sorted(set(paper.get("merged_ids") or [paper.get("canonical_id") or ""])),
         "template": {
             "id": template.id,
             "metadata": template.metadata,

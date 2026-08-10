@@ -6,6 +6,7 @@ heading, a moved page, a screenshot that was never committed. None of that
 shows up until a reader clicks it, which is exactly the kind of rot a test
 should catch instead.
 """
+
 import re
 import subprocess
 import sys
@@ -19,6 +20,7 @@ SCRIPT = REPO_ROOT / "scripts" / "update_toc.py"
 
 sys.path.insert(0, str(SCRIPT.parent))
 import update_toc  # noqa: E402
+
 sys.path.pop(0)
 
 # Anything with a scheme, or a bare fragment, is not a repo path.
@@ -87,9 +89,7 @@ def _links(path: Path) -> list[str]:
 def test_every_in_page_anchor_resolves(page):
     anchors = _anchors(page)
     broken = [
-        target
-        for target in _links(page)
-        if target.startswith("#") and target[1:] not in anchors
+        target for target in _links(page) if target.startswith("#") and target[1:] not in anchors
     ]
     where = page.relative_to(REPO_ROOT)
     assert not broken, f"{where} links to headings it does not have: {broken}"
@@ -112,9 +112,8 @@ def test_every_cross_page_link_resolves(page):
             problems.append(f"{target} → not in the repository{hint}")
             continue
         # A fragment is only checkable when the destination is Markdown.
-        if fragment and destination.suffix == ".md":
-            if fragment not in _anchors(destination):
-                problems.append(f"{target} → {destination.name} has no such heading")
+        if fragment and destination.suffix == ".md" and fragment not in _anchors(destination):
+            problems.append(f"{target} → {destination.name} has no such heading")
     assert not problems, f"{page.relative_to(REPO_ROOT)}: {problems}"
 
 
@@ -144,8 +143,7 @@ def test_the_tables_of_contents_are_current():
         cwd=REPO_ROOT,
     )
     assert result.returncode == 0, (
-        f"{result.stdout}{result.stderr}\n"
-        "Run: uv run python scripts/update_toc.py"
+        f"{result.stdout}{result.stderr}\nRun: uv run python scripts/update_toc.py"
     )
 
 
@@ -153,9 +151,5 @@ def test_the_docs_index_lists_every_page():
     """A page nobody links to is a page nobody finds."""
     index = (REPO_ROOT / "docs" / "README.md").read_text(encoding="utf-8")
     linked = set(re.findall(r"\]\(([a-z0-9-]+\.md)\)", index))
-    actual = {
-        p.name
-        for p in (REPO_ROOT / "docs").glob("*.md")
-        if p.name != "README.md"
-    }
+    actual = {p.name for p in (REPO_ROOT / "docs").glob("*.md") if p.name != "README.md"}
     assert not (actual - linked), f"not listed in docs/README.md: {sorted(actual - linked)}"

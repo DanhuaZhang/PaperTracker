@@ -5,18 +5,14 @@ from pathlib import Path
 from papertracker import cli, config, summary_templates
 
 
-def test_main_reports_invalid_template_catalog_before_resolving_profiles(
-    monkeypatch, caplog
-):
+def test_main_reports_invalid_template_catalog_before_resolving_profiles(monkeypatch, caplog):
     monkeypatch.setattr(
         config,
         "summary_template_catalog",
         lambda: (_ for _ in ()).throw(config.ConfigError("templates are invalid")),
     )
     resolved = []
-    monkeypatch.setattr(
-        cli, "_resolve_profiles", lambda args: resolved.append(True) or ([], 0)
-    )
+    monkeypatch.setattr(cli, "_resolve_profiles", lambda args: resolved.append(True) or ([], 0))
 
     with caplog.at_level(logging.ERROR):
         result = cli.main([])
@@ -37,9 +33,7 @@ def test_no_summarize_does_not_require_template_catalog(monkeypatch):
     assert cli.main(["--no-summarize"]) == 0
 
 
-def test_main_reports_unknown_zotero_template_before_resolving_profiles(
-    monkeypatch, caplog
-):
+def test_main_reports_unknown_zotero_template_before_resolving_profiles(monkeypatch, caplog):
     templates, default = config.summary_template_catalog()
     monkeypatch.setattr(config, "summary_template_catalog", lambda: (templates, default))
     monkeypatch.setattr(
@@ -50,14 +44,10 @@ def test_main_reports_unknown_zotero_template_before_resolving_profiles(
         ),
     )
     resolved = []
-    monkeypatch.setattr(
-        cli, "_resolve_profiles", lambda args: resolved.append(True) or ([], 0)
-    )
+    monkeypatch.setattr(cli, "_resolve_profiles", lambda args: resolved.append(True) or ([], 0))
 
     with caplog.at_level(logging.ERROR):
-        result = cli.main(
-            ["--zotero-collection", "Reading", "--zotero-template", "missing"]
-        )
+        result = cli.main(["--zotero-collection", "Reading", "--zotero-template", "missing"])
 
     assert result == 2
     assert resolved == []
@@ -87,13 +77,9 @@ def test_list_templates_prints_metadata_and_default_status(monkeypatch, capsys, 
 
 def test_template_and_deprecated_alias_conflict_before_profiles(monkeypatch, caplog):
     resolved = []
-    monkeypatch.setattr(
-        cli, "_resolve_profiles", lambda args: resolved.append(True) or ([], 0)
-    )
+    monkeypatch.setattr(cli, "_resolve_profiles", lambda args: resolved.append(True) or ([], 0))
     with caplog.at_level(logging.ERROR):
-        result = cli.main(
-            ["--template", "abstract-screen", "--zotero-template", "deep-technical"]
-        )
+        result = cli.main(["--template", "abstract-screen", "--zotero-template", "deep-technical"])
     assert result == 2
     assert not resolved
     assert "Conflicting template values" in caplog.text
@@ -107,16 +93,18 @@ def test_deprecated_alias_sets_same_global_override(monkeypatch, caplog):
     monkeypatch.setattr(
         config,
         "summary_template",
-        lambda selected: captured.append(selected)
-        or summary_templates.SummaryTemplate(
-            selected, Path(f"{selected}.md"), selected, "d", "fulltext", "## B"
+        lambda selected: (
+            captured.append(selected)
+            or summary_templates.SummaryTemplate(
+                selected, Path(f"{selected}.md"), selected, "d", "fulltext", "## B"
+            )
         ),
     )
     monkeypatch.setattr(cli, "_resolve_profiles", lambda args: ([], 0))
     with caplog.at_level(logging.WARNING):
-        assert cli.main(
-            ["--zotero-collection", "Reading", "--zotero-template", "deep-technical"]
-        ) == 0
+        assert (
+            cli.main(["--zotero-collection", "Reading", "--zotero-template", "deep-technical"]) == 0
+        )
     assert captured == ["deep-technical"]
     assert "deprecated" in caplog.text
 
@@ -194,8 +182,6 @@ def test_fulltext_template_on_a_discovery_run_is_rejected_once(caplog):
 
 def test_abstract_template_on_a_zotero_run_is_rejected(caplog):
     with caplog.at_level(logging.ERROR):
-        code = cli.main(
-            ["--zotero-collection", "Reading", "--template", "abstract-screen"]
-        )
+        code = cli.main(["--zotero-collection", "Reading", "--template", "abstract-screen"])
     assert code == 2
     assert "needs abstract evidence" in caplog.text

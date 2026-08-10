@@ -18,9 +18,7 @@ def _template(tmp_path, evidence="abstract", body="## Finding"):
     )
 
 
-def test_abstract_prompt_has_deterministic_metadata_and_no_template_header(
-    monkeypatch, tmp_path
-):
+def test_abstract_prompt_has_deterministic_metadata_and_no_template_header(monkeypatch, tmp_path):
     template = _template(tmp_path)
     monkeypatch.setattr(config, "summary_template", lambda selected: template)
     paper = {
@@ -79,9 +77,7 @@ def test_abstract_template_rejects_missing_abstract_before_llm(monkeypatch, tmp_
     invoke.assert_not_called()
 
 
-def test_fulltext_pipeline_processes_every_chunk_for_both_providers(
-    monkeypatch, tmp_path
-):
+def test_fulltext_pipeline_processes_every_chunk_for_both_providers(monkeypatch, tmp_path):
     template = _template(tmp_path, "fulltext", "## Method\n\n## Results")
     monkeypatch.setattr(config, "summary_template", lambda selected: template)
     pdf = tmp_path / "paper.pdf"
@@ -112,9 +108,7 @@ def test_fulltext_pipeline_processes_every_chunk_for_both_providers(
         assert result.startswith("> Evidence: full text — 2/3 pages")
 
 
-def test_extract_pdf_preserves_all_pages_and_splits_oversized_page(
-    monkeypatch, tmp_path
-):
+def test_extract_pdf_preserves_all_pages_and_splits_oversized_page(monkeypatch, tmp_path):
     import pypdf
 
     class Page:
@@ -159,9 +153,7 @@ def test_scanned_pdf_fails_with_ocr_message_before_llm(monkeypatch, tmp_path):
         summarizer.extract_pdf_evidence(pdf)
 
 
-def test_recursive_note_consolidation_bounds_large_intermediate_evidence(
-    monkeypatch, tmp_path
-):
+def test_recursive_note_consolidation_bounds_large_intermediate_evidence(monkeypatch, tmp_path):
     template = _template(tmp_path, "fulltext")
     calls = []
 

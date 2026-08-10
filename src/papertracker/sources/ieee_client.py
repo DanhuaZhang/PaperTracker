@@ -1,4 +1,5 @@
 """IEEE source = CrossRef member:263. No IEEE Xplore API key required."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -15,6 +16,9 @@ def fetch(
     profile: config.ProjectProfile | None = None,
 ) -> list[dict]:
     return crossref_client.search(
-        member_id=IEEE_MEMBER_ID, source_label="ieee",
-        start_date=start_date, end_date=end_date, profile=profile,
+        member_id=IEEE_MEMBER_ID,
+        source_label="ieee",
+        start_date=start_date,
+        end_date=end_date,
+        profile=profile,
     )

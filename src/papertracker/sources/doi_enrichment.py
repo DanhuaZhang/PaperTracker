@@ -1,4 +1,5 @@
 """Cached DOI abstract fallback and supplemental metadata enrichment."""
+
 from __future__ import annotations
 
 import logging
@@ -50,7 +51,7 @@ def _provider_metadata(provider_name: str, doi: str) -> dict:
                 metadata = {}
             else:
                 metadata = provider(doi) or {}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — one provider must not break the chain
         log.warning("DOI provider %s failed for %s: %s", provider_name, doi, exc)
         metadata = {}
 
@@ -110,9 +111,7 @@ def merge_metadata(paper: dict, metadata: dict) -> None:
         )
     for field in ("citations", "references"):
         if metadata.get(field):
-            paper[field] = sorted(
-                {*paper.get(field, []), *metadata[field]}
-            )
+            paper[field] = sorted({*paper.get(field, []), *metadata[field]})
     sources = {
         *paper.get("metadata_sources", []),
         *metadata.get("metadata_sources", []),

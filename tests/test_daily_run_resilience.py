@@ -59,12 +59,8 @@ def test_same_day_digest_merges_new_papers(tmp_path):
     first = digest_writer.render_digest(date, [(_paper("First"), "First summary")], profile)
     second = digest_writer.render_digest(date, [(_paper("Second"), "Second summary")], profile)
 
-    path = digest_writer.save_daily_digest(
-        date, first, profile.digest_dir, new_paper_count=1
-    )
-    digest_writer.save_daily_digest(
-        date, second, profile.digest_dir, new_paper_count=1
-    )
+    path = digest_writer.save_daily_digest(date, first, profile.digest_dir, new_paper_count=1)
+    digest_writer.save_daily_digest(date, second, profile.digest_dir, new_paper_count=1)
 
     content = path.read_text(encoding="utf-8")
     assert "2 paper(s) matched" in content
@@ -77,9 +73,7 @@ def test_empty_second_run_preserves_existing_digest(tmp_path):
     profile = _profile(tmp_path)
     date = "2026-08-08"
     first = digest_writer.render_digest(date, [(_paper("First"), "Summary")], profile)
-    path = digest_writer.save_daily_digest(
-        date, first, profile.digest_dir, new_paper_count=1
-    )
+    path = digest_writer.save_daily_digest(date, first, profile.digest_dir, new_paper_count=1)
     before = path.read_bytes()
 
     digest_writer.save_daily_digest(

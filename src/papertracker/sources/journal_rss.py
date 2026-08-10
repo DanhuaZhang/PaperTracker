@@ -1,8 +1,9 @@
 """RSS source for journals where reliable TOC feeds exist.
 
-Complements CrossRef — RSS sometimes appears 1–2 days earlier than CrossRef deposit.
+Complements CrossRef — RSS sometimes appears 1-2 days earlier than CrossRef deposit.
 DOI-based canonical IDs unify duplicates with the CrossRef sources via dedup.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -41,7 +42,7 @@ def fetch(
         attempted += 1
         try:
             entries = _fetch_feed(rss_url)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — one blocked feed must not sink the source
             log.warning("RSS %s (%s): %s", venue["name"], rss_url, e)
             failed_feeds.append(venue["name"])
             continue
@@ -75,7 +76,8 @@ def fetch(
                 "RSS[%s]: all %d entries carry no DOI, so none can be deduplicated "
                 "against Crossref and all were dropped. This feed adds nothing; "
                 "the venue still arrives via Crossref.",
-                venue["name"], len(entries),
+                venue["name"],
+                len(entries),
             )
     if failed_feeds:
         names = ", ".join(sorted(set(failed_feeds)))
@@ -90,12 +92,15 @@ def fetch(
         log.warning(
             "RSS feed fetch failed for %s — keeping the %d feed(s) that answered. "
             "Those venues still arrive via Crossref, typically a day or two later.",
-            names, attempted - len(failed_feeds),
+            names,
+            attempted - len(failed_feeds),
         )
     log.info(
         "journal_rss: kept %d (dropped %d no-DOI, %d no-abstract, %d out of window) "
         "— pre-relevance",
-        len(out), total_dropped_no_doi, total_dropped_no_abstract,
+        len(out),
+        total_dropped_no_doi,
+        total_dropped_no_abstract,
         total_dropped_out_of_window,
     )
     return out
@@ -140,7 +145,7 @@ def _to_paper(entry, venue: dict) -> dict | None:
 
     abstract = ""
     summary = entry.get("summary") or ""
-    if summary and len(summary.split()) > 20:        # heuristic: skip very short summaries
+    if summary and len(summary.split()) > 20:  # heuristic: skip very short summaries
         abstract = re.sub(r"<[^>]+>", "", summary).strip()
 
     authors: list[str] = []

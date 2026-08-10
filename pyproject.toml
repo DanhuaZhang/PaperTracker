@@ -5,7 +5,7 @@ description = "Daily markdown digest of new papers matching your research topics
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastembed>=0.8.0",
     "feedparser>=6.0",
@@ -29,3 +29,38 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+# 100 rather than ruff's default 88: it is where this codebase already sits (the
+# 99th percentile line in src/ is 98 characters), so it enforces the existing
+# style instead of reflowing every signature and log call to match a new one.
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# One rule per convention worth keeping, and nothing that argues with prose.
+#   E,W,F  pycodestyle + pyflakes — the baseline
+#   I      one import order, so a diff never turns on where an import landed
+#   N      PEP 8 names: snake_case functions, UPPER_CASE module constants
+#   UP     no idioms older than the Python we require
+#   B,BLE  real bug shapes: silent excepts, unzipped-length mismatches
+#   A      never shadow a builtin
+#   C4,PIE,RET,SIM  one obvious spelling for comprehensions and early returns
+#   PTH    pathlib everywhere; this codebase already uses it for every real path
+#   RUF    ruff's own checks, including stale noqa
+select = ["E", "W", "F", "I", "N", "UP", "B", "BLE", "A", "C4", "PIE", "PTH", "RET", "SIM", "RUF"]
+# A branching assignment stays an if/else. Collapsing one into a ternary that
+# wraps across lines trades a readable statement for a shorter one.
+ignore = ["SIM108"]
+
+[tool.ruff.lint.per-file-ignores]
+# Long lines in these files are payload, not code: minified CSS/JS for the
+# picker page, prompt text sent to the model verbatim, and SQL/JSON fixtures.
+# Re-wrapping them changes what is emitted rather than how the source reads.
+"src/papertracker/selector.py" = ["E501"]
+"src/papertracker/summarizer.py" = ["E501"]
+"src/papertracker/related_work.py" = ["E501"]
+"tests/*" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["papertracker"]

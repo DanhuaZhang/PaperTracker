@@ -1,4 +1,5 @@
 """ACM source = CrossRef member:320. No ACM Digital Library API key required."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -15,6 +16,9 @@ def fetch(
     profile: config.ProjectProfile | None = None,
 ) -> list[dict]:
     return crossref_client.search(
-        member_id=ACM_MEMBER_ID, source_label="acm",
-        start_date=start_date, end_date=end_date, profile=profile,
+        member_id=ACM_MEMBER_ID,
+        source_label="acm",
+        start_date=start_date,
+        end_date=end_date,
+        profile=profile,
     )

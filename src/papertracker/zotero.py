@@ -4,6 +4,7 @@ Zotero 7's local HTTP API exposes no reliable attachment-file endpoint, so we re
 the SQLite DB directly. Zotero locks the live DB, so we copy it to a temp file first
 (per Zotero's "Direct SQLite Database Access" guidance) and open read-only.
 """
+
 from __future__ import annotations
 
 import logging
@@ -178,10 +179,7 @@ def _resolve_collection(collection_path: str, collections: list[dict]) -> dict:
     if "/" in requested:
         matches = [c for c in collections if c["path"] == requested]
     else:
-        matches = [
-            c for c in collections
-            if c["path"] == requested or c["name"] == requested
-        ]
+        matches = [c for c in collections if c["path"] == requested or c["name"] == requested]
 
     if not matches:
         available = "\n".join(f"- {c['path']}" for c in collections[:20])
@@ -265,7 +263,7 @@ def _item_fields(con: sqlite3.Connection, item_id: int) -> dict[str, str]:
         """,
         (item_id,),
     ).fetchall()
-    return {field: value for field, value in rows}
+    return dict(rows)
 
 
 def _item_creators(con: sqlite3.Connection, item_id: int) -> list[str]:
@@ -346,12 +344,12 @@ def _attachment_path(con: sqlite3.Connection, parent_id: int, data_dir: Path) ->
         if not path:
             continue
         if path.startswith("storage:"):
-            candidate = data_dir / "storage" / key / path[len("storage:"):]
+            candidate = data_dir / "storage" / key / path[len("storage:") :]
         elif path.startswith("attachments:"):
             base = config.zotero_linked_base_dir()
             if base is None:
                 continue
-            candidate = base / path[len("attachments:"):]
+            candidate = base / path[len("attachments:") :]
         else:
             candidate = Path(path)  # absolute linked path
         if candidate.exists():

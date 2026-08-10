@@ -1,4 +1,5 @@
 """Normalized DOI metadata adapters for optional scholarly backup APIs."""
+
 from __future__ import annotations
 
 import html
@@ -26,7 +27,7 @@ def normalize_doi(raw: str) -> str:
         "doi:",
     ):
         if doi.startswith(prefix):
-            doi = doi[len(prefix):]
+            doi = doi[len(prefix) :]
             break
     return doi.strip()
 
@@ -105,11 +106,7 @@ def _first_text(values: Any) -> str:
         if isinstance(value, str):
             text = _clean(value)
         elif isinstance(value, dict):
-            text = _clean(
-                value.get("description")
-                or value.get("text")
-                or value.get("value")
-            )
+            text = _clean(value.get("description") or value.get("text") or value.get("value"))
         else:
             text = ""
         if text:
@@ -125,11 +122,7 @@ def semantic_scholar(doi: str) -> dict:
     data = _get_json(
         "semantic_scholar",
         f"https://api.semanticscholar.org/graph/v1/paper/DOI:{quote(doi, safe='/')}",
-        params={
-            "fields": (
-                "title,abstract,authors,year,venue,citationCount,openAccessPdf"
-            )
-        },
+        params={"fields": ("title,abstract,authors,year,venue,citationCount,openAccessPdf")},
         headers=headers,
     )
     if not isinstance(data, dict):
@@ -249,9 +242,7 @@ def unpaywall(doi: str) -> dict:
     return _compact(
         "unpaywall",
         oa_url=_clean(
-            location.get("url_for_pdf") or location.get("url")
-            if isinstance(location, dict)
-            else ""
+            location.get("url_for_pdf") or location.get("url") if isinstance(location, dict) else ""
         ),
     )
 

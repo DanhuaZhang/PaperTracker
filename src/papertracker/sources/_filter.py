@@ -1,4 +1,5 @@
 """Shared local helpers used by sources (venue tagging)."""
+
 from __future__ import annotations
 
 from .. import config

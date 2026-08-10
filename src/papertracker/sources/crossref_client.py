@@ -4,6 +4,7 @@ CrossRef is the canonical DOI registry. IEEE and ACM (and most other publishers)
 deposit metadata for every paper on publication. No auth required; we identify
 ourselves to the "polite pool" via User-Agent + mailto.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -22,7 +23,7 @@ log = logging.getLogger(__name__)
 
 _ENDPOINT = "https://api.crossref.org/works"
 _PAGE_SIZE = 100
-_INTER_PAGE_DELAY_SEC = 0.5     # CrossRef polite pool has no required delay; this is conservative
+_INTER_PAGE_DELAY_SEC = 0.5  # CrossRef polite pool has no required delay; this is conservative
 
 # Retry/backoff for transient rate-limiting. CrossRef returns 429 (and occasionally 503)
 # under load, especially in the anonymous pool; it usually sends a Retry-After header.
@@ -81,7 +82,9 @@ def search(
 
     log.info(
         "CrossRef[%s]: kept %d (dropped %d no-abstract%s) — pre-relevance",
-        source_label, len(out), dropped_no_abstract,
+        source_label,
+        len(out),
+        dropped_no_abstract,
         f", {dropped_not_priority_venue} not priority venue" if dropped_not_priority_venue else "",
     )
     return out
@@ -100,10 +103,15 @@ def _get_with_retry(params: dict, headers: dict, source_label: str, offset: int)
             resp.raise_for_status()
             return resp.json()
         retry_after = resp.headers.get("Retry-After", "")
-        wait = float(retry_after) if retry_after.isdigit() else _BACKOFF_BASE_SEC * (2 ** attempt)
+        wait = float(retry_after) if retry_after.isdigit() else _BACKOFF_BASE_SEC * (2**attempt)
         log.warning(
             "CrossRef[%s] %d at offset=%d — backing off %.1fs (attempt %d/%d)",
-            source_label, resp.status_code, offset, wait, attempt + 1, _MAX_RETRIES,
+            source_label,
+            resp.status_code,
+            offset,
+            wait,
+            attempt + 1,
+            _MAX_RETRIES,
         )
         time.sleep(wait)
     # Retries exhausted — raise the last response's error for the caller to handle.
@@ -135,7 +143,10 @@ def _fetch_all_items(
             params["mailto"] = config.USER_EMAIL
         log.info(
             "CrossRef[%s]: GET offset=%d rows=%d filter=%s",
-            source_label, offset, page, filter_str,
+            source_label,
+            offset,
+            page,
+            filter_str,
         )
         try:
             data = _get_with_retry(params, headers, source_label, offset)
@@ -161,7 +172,9 @@ def _fetch_all_items(
         log.warning(
             "CrossRef[%s]: capped at %d of %d total — raise max_results_per_query in "
             "config.toml, or pass --max-results, to see more",
-            source_label, cap, total_results,
+            source_label,
+            cap,
+            total_results,
         )
     return items
 
@@ -202,7 +215,7 @@ def _normalize(item: dict, source: str) -> dict | None:
     return {
         "canonical_id": f"doi:{doi.lower()}",
         "source": source,
-        "venue": None,                       # filled by caller
+        "venue": None,  # filled by caller
         "title": title,
         "abstract": abstract,
         "authors": authors,

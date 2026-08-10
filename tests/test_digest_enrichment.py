@@ -22,4 +22,3 @@ def test_daily_digest_renders_doi_enrichment_fields():
     assert "**Open access:** [PDF/repository](https://example.org/paper.pdf)" in digest
     assert "**Citations:** 14" in digest
     assert "**Metadata:** opencitations, unpaywall" in digest
-

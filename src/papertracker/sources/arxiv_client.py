@@ -1,4 +1,5 @@
 """arXiv Atom feed client. No auth required."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -26,8 +27,7 @@ _ENDPOINT = "https://export.arxiv.org/api/query"
 def _build_query(start: dt.date, end: dt.date, categories: list[str] | None = None) -> str:
     cat_query = "+OR+".join(f"cat:{c}" for c in (categories or config.ARXIV_CATEGORIES))
     date_range = (
-        f"submittedDate:[{start.strftime('%Y%m%d')}000000"
-        f"+TO+{end.strftime('%Y%m%d')}235959]"
+        f"submittedDate:[{start.strftime('%Y%m%d')}000000+TO+{end.strftime('%Y%m%d')}235959]"
     )
     return f"({cat_query})+AND+{date_range}"
 
@@ -37,7 +37,10 @@ def fetch(
     end_date: dt.date,
     profile: config.ProjectProfile | None = None,
 ) -> list[dict]:
-    """Fetch arXiv entries submitted in [start_date, end_date]; relevance filtering happens in cli.py."""
+    """Fetch arXiv entries submitted in [start_date, end_date].
+
+    Relevance filtering happens later, in cli.py.
+    """
     q = _build_query(start_date, end_date, profile.arxiv_categories if profile else None)
     cap = config.MAX_RESULTS_PER_QUERY
     headers = {"User-Agent": config.USER_AGENT}
@@ -91,15 +94,19 @@ def _parse(xml_text: str) -> list[dict]:
         # capturing it lets dedup merge the preprint with its IEEE/ACM record.
         doi_node = entry.find("arxiv:doi", _NS)
         doi = (doi_node.text or "").strip() if doi_node is not None else None
-        out.append({
-            "canonical_id": f"arxiv:{arxiv_id}",
-            "source": "arxiv",
-            "venue": None,
-            "title": (title_node.text or "").strip().replace("\n", " "),
-            "abstract": (summary_node.text or "").strip(),
-            "authors": authors,
-            "published": ((published_node.text or "")[:10] if published_node is not None else ""),
-            "url": f"https://arxiv.org/abs/{arxiv_id}",
-            "doi": doi or None,
-        })
+        out.append(
+            {
+                "canonical_id": f"arxiv:{arxiv_id}",
+                "source": "arxiv",
+                "venue": None,
+                "title": (title_node.text or "").strip().replace("\n", " "),
+                "abstract": (summary_node.text or "").strip(),
+                "authors": authors,
+                "published": (
+                    (published_node.text or "")[:10] if published_node is not None else ""
+                ),
+                "url": f"https://arxiv.org/abs/{arxiv_id}",
+                "doi": doi or None,
+            }
+        )
     return out

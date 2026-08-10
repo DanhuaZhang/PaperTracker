@@ -65,9 +65,7 @@ def test_crossref_propagates_fetch_failure(monkeypatch):
     monkeypatch.setattr(
         crossref_client,
         "_get_with_retry",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            requests.ConnectionError("offline")
-        ),
+        lambda *args, **kwargs: (_ for _ in ()).throw(requests.ConnectionError("offline")),
     )
 
     with pytest.raises(requests.ConnectionError, match="offline"):

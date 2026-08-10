@@ -1,4 +1,5 @@
 """Cross-source deduplication via canonical IDs (DOI when available, else source-prefixed)."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -72,7 +73,7 @@ def deduplicate_across_sources(papers: list[dict]) -> list[dict]:
     return _merge_same_work(list(bucket.values()))
 
 
-def _norm_title(title: str) -> str:
+def _normalize_title(title: str) -> str:
     return _NON_ALNUM_RE.sub(" ", (title or "").lower()).strip()
 
 
@@ -90,7 +91,7 @@ def _content_key(paper: dict) -> str | None:
     doi = (paper.get("doi") or "").strip().lower()
     if doi:
         return f"doi:{doi}"
-    nt = _norm_title(paper.get("title", ""))
+    nt = _normalize_title(paper.get("title", ""))
     if len(nt.replace(" ", "")) >= _MIN_TITLE_CHARS:
         return f"title:{nt}|{_surname(paper.get('authors') or [])}"
     return None
@@ -128,7 +129,9 @@ def _merge_same_work(papers: list[dict]) -> list[dict]:
             rep["container_title"] = container
         if len(group) > 1:
             log.info(
-                "Merged %d records as one work: %s", len(group), ", ".join(merged_ids),
+                "Merged %d records as one work: %s",
+                len(group),
+                ", ".join(merged_ids),
             )
         out.append(rep)
     return out

@@ -62,9 +62,11 @@ def test_annotate_candidates_forces_metadata_only_without_abstract(monkeypatch):
     monkeypatch.setattr(
         summarizer,
         "run_json_prompt",
-        lambda provider, model, prompt: """
+        lambda provider, model, prompt: (
+            """
 {"annotations":[{"canonical_id":"openalex:no-abstract-paper","role":"method","why_cite":"Relevant method.","difference_from_contribution":"Uses a different signal.","evidence_basis":"abstract"}]}
-""",
+"""
+        ),
     )
 
     annotated = related_work.annotate_candidates([paper], facets, _profile(), "codex", "gpt")
@@ -79,9 +81,7 @@ def test_local_annotations_do_not_call_llm(monkeypatch):
     monkeypatch.setattr(
         summarizer,
         "run_json_prompt",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("LLM must not be called")
-        ),
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("LLM must not be called")),
     )
 
     annotated = related_work.annotate_candidates_locally([paper], _profile())

@@ -1,4 +1,5 @@
 import re
+
 import pytest
 
 from papertracker import selector, summary_templates
@@ -7,7 +8,12 @@ from papertracker import selector, summary_templates
 def _templates(tmp_path):
     return (
         summary_templates.SummaryTemplate(
-            "screen", tmp_path / "screen.md", "Rapid screen", "Uses the abstract", "abstract", "## Screen"
+            "screen",
+            tmp_path / "screen.md",
+            "Rapid screen",
+            "Uses the abstract",
+            "abstract",
+            "## Screen",
         ),
         summary_templates.SummaryTemplate(
             "deep", tmp_path / "deep.md", "Deep read", "Uses every PDF page", "fulltext", "## Deep"
@@ -48,9 +54,12 @@ def test_form_parsing_accepts_per_paper_compatible_choices(tmp_path):
 
 
 def test_text_parsing_supports_defaults_explicit_ids_and_ranges():
-    assert selector._parse_selection(
-        "1, 2:deep, 3-4:screen", 4, ["screen", "deep"], "screen"
-    ) == [(0, "screen"), (1, "deep"), (2, "screen"), (3, "screen")]
+    assert selector._parse_selection("1, 2:deep, 3-4:screen", 4, ["screen", "deep"], "screen") == [
+        (0, "screen"),
+        (1, "deep"),
+        (2, "screen"),
+        (3, "screen"),
+    ]
     assert selector._parse_selection("all", 2, ["screen", "deep"], "deep") == [
         (0, "deep"),
         (1, "deep"),
@@ -58,9 +67,7 @@ def test_text_parsing_supports_defaults_explicit_ids_and_ranges():
 
 
 def test_html_shows_labels_badges_descriptions_and_disabled_reasons(tmp_path):
-    page = selector._render_html(
-        [{"title": "T", "abstract": "A"}], _templates(tmp_path), "screen"
-    )
+    page = selector._render_html([{"title": "T", "abstract": "A"}], _templates(tmp_path), "screen")
     assert '<select name="template_0"' in page
     assert "Rapid screen [abstract] — Uses the abstract" in page
     assert 'value="deep" disabled' in page

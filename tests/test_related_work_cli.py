@@ -105,11 +105,7 @@ def test_related_work_mode_writes_digest_without_seen_or_llm(monkeypatch, tmp_pa
     assert cli._run_related_work_profile(profile, args) == 0
 
     digest_path = (
-        tmp_path
-        / "digests"
-        / "related"
-        / "related-work"
-        / f"{dt.date.today().isoformat()}.md"
+        tmp_path / "digests" / "related" / "related-work" / f"{dt.date.today().isoformat()}.md"
     )
     content = digest_path.read_text(encoding="utf-8")
     assert "PaperTracker Related Work" in content
@@ -143,7 +139,9 @@ def test_faceted_related_work_writes_matrix_and_json_without_seen(monkeypatch, t
             {**_paper("System Classic", 500), "facet_hits": {"systems": ["citation"]}},
         ],
     )
-    monkeypatch.setattr(relevance, "score_batch", lambda texts, topic_statement=None: [0.9] * len(texts))
+    monkeypatch.setattr(
+        relevance, "score_batch", lambda texts, topic_statement=None: [0.9] * len(texts)
+    )
     monkeypatch.setattr(
         summarizer,
         "run_json_prompt",
@@ -259,7 +257,9 @@ def test_faceted_related_work_select_writes_only_approved_candidates(monkeypatch
             {**_paper("System Classic", 500), "facet_hits": {"systems": ["citation"]}},
         ],
     )
-    monkeypatch.setattr(relevance, "score_batch", lambda texts, topic_statement=None: [0.9] * len(texts))
+    monkeypatch.setattr(
+        relevance, "score_batch", lambda texts, topic_statement=None: [0.9] * len(texts)
+    )
     monkeypatch.setattr(
         summarizer,
         "run_json_prompt",

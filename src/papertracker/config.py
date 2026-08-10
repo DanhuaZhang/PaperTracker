@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import os
 import re
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import related_work
@@ -24,8 +24,7 @@ def _repository_config_path() -> Path:
         return preferred
     if _LEGACY_REPOSITORY_CONFIG_PATH.is_file():
         log.warning(
-            "Reading runtime defaults from %s. Rename it to %s — papertracker.toml "
-            "is deprecated.",
+            "Reading runtime defaults from %s. Rename it to %s — papertracker.toml is deprecated.",
             _LEGACY_REPOSITORY_CONFIG_PATH,
             preferred,
         )
@@ -49,6 +48,7 @@ USER_DATA_DIR = Path(
 
 PROJECT_CONFIG_PATH = globals().get("PROJECT_CONFIG_PATH", _REPOSITORY_CONFIG_PATH)
 
+
 def _default_projects_config_path() -> Path:
     """Prefer user_data/projects.toml; tolerate the pre-user_data repo-root location."""
     preferred = USER_DATA_DIR / "projects.toml"
@@ -57,7 +57,8 @@ def _default_projects_config_path() -> Path:
     legacy = REPOSITORY_ROOT / "projects.toml"
     if legacy.is_file():
         log.warning(
-            "Reading project profiles from %s. Move it to %s — the repo-root location is deprecated.",
+            "Reading project profiles from %s. Move it to %s — the repo-root "
+            "location is deprecated.",
             legacy,
             preferred,
         )
@@ -134,18 +135,11 @@ REASONING_EFFORT = _PROJECT_CONFIG.get("reasoning_effort", "medium")
 # preferentially serve identified clients.
 USER_EMAIL = os.environ.get("PAPERTRACKER_EMAIL", _cfg("user_email"))
 USER_AGENT_NAME = _cfg("user_agent_name")
-USER_AGENT = (
-    f"{USER_AGENT_NAME} (mailto:{USER_EMAIL})" if USER_EMAIL
-    else USER_AGENT_NAME
-)
+USER_AGENT = f"{USER_AGENT_NAME} (mailto:{USER_EMAIL})" if USER_EMAIL else USER_AGENT_NAME
 OPENALEX_API_KEY = os.environ.get("PAPERTRACKER_OPENALEX_API_KEY", "").strip()
-SEMANTIC_SCHOLAR_API_KEY = os.environ.get(
-    "PAPERTRACKER_SEMANTIC_SCHOLAR_API_KEY", ""
-).strip()
+SEMANTIC_SCHOLAR_API_KEY = os.environ.get("PAPERTRACKER_SEMANTIC_SCHOLAR_API_KEY", "").strip()
 CORE_API_KEY = os.environ.get("PAPERTRACKER_CORE_API_KEY", "").strip()
-OPENCITATIONS_ACCESS_TOKEN = os.environ.get(
-    "PAPERTRACKER_OPENCITATIONS_ACCESS_TOKEN", ""
-).strip()
+OPENCITATIONS_ACCESS_TOKEN = os.environ.get("PAPERTRACKER_OPENCITATIONS_ACCESS_TOKEN", "").strip()
 
 
 def _source_list(env_name: str, key: str, default: str) -> tuple[str, ...]:
@@ -160,9 +154,7 @@ def _source_list(env_name: str, key: str, default: str) -> tuple[str, ...]:
     if raw is None:
         configured = _PROJECT_CONFIG.get(key, default)
         if isinstance(configured, (list, tuple)):
-            return tuple(
-                str(part).strip().lower() for part in configured if str(part).strip()
-            )
+            return tuple(str(part).strip().lower() for part in configured if str(part).strip())
         raw = str(configured)
     return tuple(part.strip().lower() for part in raw.split(",") if part.strip())
 
@@ -256,7 +248,7 @@ _PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 def _profile_value(raw: dict, key: str, default):
-    return raw[key] if key in raw else default
+    return raw.get(key, default)
 
 
 def _projects_default(key: str, fallback):
@@ -296,8 +288,7 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
     project_id = raw.get("id")
     if not isinstance(project_id, str) or not _PROJECT_ID_RE.fullmatch(project_id):
         raise ConfigError(
-            f"Project profile IDs in {PROJECTS_CONFIG_PATH} must match "
-            "[a-z0-9][a-z0-9_-]*"
+            f"Project profile IDs in {PROJECTS_CONFIG_PATH} must match [a-z0-9][a-z0-9_-]*"
         )
 
     name = raw.get("name", project_id)
@@ -319,7 +310,9 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
         crossref_query_hint=_profile_value(raw, "crossref_query_hint", CROSSREF_QUERY_HINT),
         arxiv_categories=list(_profile_value(raw, "arxiv_categories", ARXIV_CATEGORIES)),
         relevance_threshold=float(_profile_value(raw, "relevance_threshold", RELEVANCE_THRESHOLD)),
-        relevance_scorer=_relevance_scorer(_profile_value(raw, "relevance_scorer", RELEVANCE_SCORER)),
+        relevance_scorer=_relevance_scorer(
+            _profile_value(raw, "relevance_scorer", RELEVANCE_SCORER)
+        ),
         hybrid_relevance_threshold=float(
             _profile_value(raw, "hybrid_relevance_threshold", HYBRID_RELEVANCE_THRESHOLD)
         ),
@@ -327,7 +320,9 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
         reranker_model=str(_profile_value(raw, "reranker_model", RERANKER_MODEL)),
         reranker_top_k=int(_profile_value(raw, "reranker_top_k", RERANKER_TOP_K)),
         priority_venues=list(
-            _profile_value(raw, "priority_venues", _projects_default("priority_venues", PRIORITY_VENUES))
+            _profile_value(
+                raw, "priority_venues", _projects_default("priority_venues", PRIORITY_VENUES)
+            )
         ),
         priority_venue_only=bool(_profile_value(raw, "priority_venue_only", PRIORITY_VENUE_ONLY)),
         enabled_sources_default=list(
@@ -385,7 +380,9 @@ def project_profiles() -> list[ProjectProfile]:
     for profile in profiles:
         assert profile.id is not None
         if profile.id in seen:
-            raise ConfigError(f"Duplicate project profile id {profile.id!r} in {PROJECTS_CONFIG_PATH}")
+            raise ConfigError(
+                f"Duplicate project profile id {profile.id!r} in {PROJECTS_CONFIG_PATH}"
+            )
         seen.add(profile.id)
     return profiles
 
@@ -405,7 +402,9 @@ def resolve_project(project_id: str | None = None) -> ProjectProfile:
     profiles = project_profiles()
     if not profiles:
         if project_id:
-            raise ConfigError(f"No {PROJECTS_CONFIG_PATH} exists; cannot use --project {project_id!r}")
+            raise ConfigError(
+                f"No {PROJECTS_CONFIG_PATH} exists; cannot use --project {project_id!r}"
+            )
         return legacy_profile()
 
     requested = project_id or default_project_id() or profiles[0].id
@@ -487,6 +486,4 @@ def summary_template(template_id: str):
         if template.id == template_id:
             return template
     choices = ", ".join(template.id for template in templates)
-    raise ConfigError(
-        f"Unknown summary template {template_id!r}. Available templates: {choices}"
-    )
+    raise ConfigError(f"Unknown summary template {template_id!r}. Available templates: {choices}")

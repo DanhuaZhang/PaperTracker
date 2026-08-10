@@ -1,22 +1,24 @@
 """Embedding-based relevance scoring.
 
 Each fetched paper's (title + abstract) is embedded once with a small local
-ONNX model (default: BAAI/bge-small-en-v1.5, ~130 MB). Cosine similarity to the
-active project profile's topic vector decides whether the paper is on-topic.
+ONNX model (default: BAAI/bge-small-en-v1.5). fastembed downloads the quantized
+build, ~65 MB on disk. Cosine similarity to the active project profile's topic
+vector decides whether the paper is on-topic.
 
 The model is loaded lazily on first call and cached; topic vectors are cached by
 topic statement so multiple profiles can run in one process.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
-from functools import lru_cache
 import math
 import os
-from pathlib import Path
 import re
 import shutil
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 from fastembed import TextEmbedding
@@ -67,14 +69,18 @@ def _looks_like_incomplete_fastembed_cache(exc: Exception) -> bool:
     message = str(exc).lower()
     return (
         "model_optimized.onnx" in message
-        and ("no_suchfile" in message or "file doesn't exist" in message or "no such file" in message)
+        and (
+            "no_suchfile" in message or "file doesn't exist" in message or "no such file" in message
+        )
     ) or "files have been corrupted during downloading process" in message
 
 
 def _clear_embedding_cache(cache_dir: Path) -> None:
     path = cache_dir.expanduser().resolve(strict=False)
     if "fastembed" not in path.name.lower():
-        log.warning("Refusing to clear embedding cache path that does not look FastEmbed-owned: %s", path)
+        log.warning(
+            "Refusing to clear embedding cache path that does not look FastEmbed-owned: %s", path
+        )
         return
     shutil.rmtree(path, ignore_errors=True)
 
@@ -132,14 +138,14 @@ def score_texts(
                 reranker_score=None,
                 final_score=score,
             )
-            for score, norm in zip(dense_scores, dense_norms)
+            for score, norm in zip(dense_scores, dense_norms, strict=True)
         ]
 
     bm25_scores = _bm25_scores(query, texts)
     bm25_norms = _minmax(bm25_scores)
     hybrid_scores = [
         (0.60 * dense_norm) + (0.40 * bm25_norm)
-        for dense_norm, bm25_norm in zip(dense_norms, bm25_norms)
+        for dense_norm, bm25_norm in zip(dense_norms, bm25_norms, strict=True)
     ]
     reranker_scores: list[float | None] = [None] * len(texts)
     final_scores = list(hybrid_scores)
@@ -153,9 +159,9 @@ def score_texts(
             top_k=reranker_top_k,
         )
         if reranked:
-            raw_by_idx = {idx: score for idx, score in reranked}
+            raw_by_idx = dict(reranked)
             raw_values = list(raw_by_idx.values())
-            norm_by_idx = dict(zip(raw_by_idx, _minmax(raw_values)))
+            norm_by_idx = dict(zip(raw_by_idx, _minmax(raw_values), strict=True))
             has_reranker_range = max(raw_values) > min(raw_values)
             for idx, raw_score in raw_by_idx.items():
                 reranker_scores[idx] = raw_score
@@ -172,8 +178,15 @@ def score_texts(
             reranker_score=reranker_score,
             final_score=final_score,
         )
-        for dense_score, dense_norm, bm25_score, bm25_norm, hybrid_score, reranker_score, final_score
-        in zip(
+        for (
+            dense_score,
+            dense_norm,
+            bm25_score,
+            bm25_norm,
+            hybrid_score,
+            reranker_score,
+            final_score,
+        ) in zip(
             dense_scores,
             dense_norms,
             bm25_scores,
@@ -181,6 +194,7 @@ def score_texts(
             hybrid_scores,
             reranker_scores,
             final_scores,
+            strict=True,
         )
     ]
 
@@ -197,10 +211,7 @@ def filter_papers(
     """Annotate each paper with `relevance_score` and return those at/above threshold."""
     if not papers:
         return []
-    texts = [
-        f"{p.get('title', '')}. {p.get('abstract', '')}".strip()
-        for p in papers
-    ]
+    texts = [f"{p.get('title', '')}. {p.get('abstract', '')}".strip() for p in papers]
     scores = score_texts(
         topic_statement or config.TOPIC_STATEMENT,
         texts,
@@ -210,7 +221,7 @@ def filter_papers(
         reranker_top_k=reranker_top_k,
     )
     kept: list[dict] = []
-    for paper, score in zip(papers, scores):
+    for paper, score in zip(papers, scores, strict=True):
         _annotate_score(paper, score)
         if score.final_score >= threshold:
             kept.append(paper)
@@ -222,7 +233,10 @@ def filter_papers(
             )
     log.info(
         "relevance filter [%s] @ %.3f: %d/%d papers passed",
-        scorer, threshold, len(kept), len(papers),
+        scorer,
+        threshold,
+        len(kept),
+        len(papers),
     )
     return kept
 
@@ -338,7 +352,7 @@ def _rerank_scores(
     try:
         model = _cross_encoder(model_name)
         raw_scores = model.predict([(query, texts[idx]) for idx in indices])
-    except Exception as exc:  # optional dependency/model download/runtime failures
+    except Exception as exc:  # noqa: BLE001 — optional dependency, download, or runtime failure
         log.warning("Reranker unavailable; falling back to hybrid relevance: %s", exc)
         return []
-    return [(idx, float(score)) for idx, score in zip(indices, raw_scores)]
+    return [(idx, float(score)) for idx, score in zip(indices, raw_scores, strict=True)]
