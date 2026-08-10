@@ -9,7 +9,15 @@ each file is one option in the `--select` dropdown.
 <ul>
   <li><a href="#where-templates-live">Where templates live</a></li>
   <li><a href="#writing-one">Writing one</a></li>
-  <li><a href="#how---select-presents-the-choice">How --select presents the choice</a></li>
+  <li>
+    <details open>
+      <summary><a href="#how---select-presents-the-choice">How --select presents the choice</a></summary>
+      <ul>
+        <li><a href="#why-some-options-are-greyed-out">Why some options are greyed out</a></li>
+      </ul>
+    </details>
+  </li>
+  <li><a href="#selecting-without-a-browser">Selecting without a browser</a></li>
   <li><a href="#next">Next</a></li>
 </ul>
 
@@ -100,10 +108,41 @@ Each row carries a color-coded relevance score, the paper's title and venue, and
 its own template dropdown, so a single run can screen some papers on the
 abstract and send others through a deep template.
 
+### Why some options are greyed out
+
+A discovery paper arrives as metadata plus an abstract, so a `fulltext` template
+has nothing to read and the dropdown disables it:
+
+```text
+Deep — Technical and Benchmark [needs PDF — not in your Zotero library]
+```
+
+Before rendering the page, PaperTracker checks your Zotero library for each
+paper — by DOI first, then by normalized title. Anything already in your library
+gets its local PDF attached, and its `fulltext` options become selectable:
+
+```text
+INFO Zotero: 4 of 23 paper(s) have a local PDF — full-text templates
+     are selectable for those
+```
+
+So the practical route to a deep summary of a paper from today's digest is: save
+it to Zotero, let the PDF download, and rerun `--select`. The lookup is
+read-only, costs one database read per run, and is skipped entirely when no
+`fulltext` template is on offer. No Zotero library simply means the deep
+templates stay disabled, which is the honest state — there is no PDF to read.
+
+To summarize a whole collection at once instead, use
+[Zotero PDF batch mode](zotero.md).
+
+## Selecting without a browser
+
 When stdin is **not** a TTY — a cron job, piped input — it goes straight to a
 numbered text prompt instead. In that prompt, a bare paper number uses the
 default template; add `:template-id` to choose another, e.g.
-`1,2:deep-human-study`. `a` selects all papers with the default template.
+`1,2:deep-human-study`. `a` selects all papers with the default template. The
+same evidence rules apply: asking for a `fulltext` template on a paper with no
+PDF is rejected with the reason rather than silently downgraded.
 
 **Over SSH**, stdin usually *is* a TTY, so PaperTracker still tries the browser
 path. If it cannot open one it does not error — it prints the URL and waits.

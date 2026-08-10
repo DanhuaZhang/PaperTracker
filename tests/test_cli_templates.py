@@ -120,3 +120,48 @@ def test_nonpositive_fetch_cap_is_rejected(caplog):
     with caplog.at_level(logging.ERROR):
         assert cli.main(["--max-results", "0"]) == 2
     assert "--max-results must be greater than zero" in caplog.text
+
+
+def _tpl(tmp_path, template_id, evidence):
+    return summary_templates.SummaryTemplate(
+        template_id, tmp_path / f"{template_id}.md", template_id, "d", evidence, "## B"
+    )
+
+
+def test_unlock_fulltext_templates_annotates_papers_from_zotero(tmp_path, monkeypatch):
+    templates = (_tpl(tmp_path, "screen", "abstract"), _tpl(tmp_path, "deep", "fulltext"))
+    papers = [{"doi": "10.1/a", "title": "A"}]
+
+    def fake(ps):
+        ps[0]["pdf_path"] = "/tmp/a.pdf"
+        return 1
+
+    monkeypatch.setattr(cli.zotero, "annotate_pdf_paths", fake)
+    cli._unlock_fulltext_templates(papers, templates)
+    assert papers[0]["pdf_path"] == "/tmp/a.pdf"
+
+
+def test_unlock_fulltext_templates_skips_lookup_without_a_fulltext_template(
+    tmp_path, monkeypatch
+):
+    """No fulltext template on offer means nothing to unlock — and a Zotero
+    library is large enough that copying it for no reason is a real cost."""
+    called = []
+    monkeypatch.setattr(
+        cli.zotero, "annotate_pdf_paths", lambda ps: called.append(True) or 0
+    )
+    cli._unlock_fulltext_templates([{"doi": "10.1/a"}], (_tpl(tmp_path, "screen", "abstract"),))
+    assert called == []
+
+
+def test_unlock_fulltext_templates_survives_a_broken_library(tmp_path, monkeypatch):
+    """An optional lookup must never take the picker down with it."""
+    templates = (_tpl(tmp_path, "deep", "fulltext"),)
+    monkeypatch.setattr(
+        cli.zotero,
+        "annotate_pdf_paths",
+        lambda ps: (_ for _ in ()).throw(OSError("database is locked")),
+    )
+    papers = [{"doi": "10.1/a"}]
+    cli._unlock_fulltext_templates(papers, templates)
+    assert "pdf_path" not in papers[0]

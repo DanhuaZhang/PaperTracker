@@ -66,6 +66,44 @@ def find_pdf(paper: dict, data_dir: Path | None = None) -> Path | None:
         tmp.cleanup()
 
 
+def annotate_pdf_paths(papers: list[dict], data_dir: Path | None = None) -> int:
+    """Set ``pdf_path`` on every paper whose PDF is already in Zotero.
+
+    Returns how many were matched. Papers that already carry a ``pdf_path``, and
+    papers with no match, are left alone.
+
+    Batched rather than looping over `find_pdf` because that copies the whole
+    ``zotero.sqlite`` per call — a 143 MB library and twenty candidates would
+    mean nearly three gigabytes of copying to answer twenty small queries. One
+    copy serves the whole list.
+    """
+    if not papers:
+        return 0
+    data_dir = Path(data_dir) if data_dir is not None else config.zotero_data_dir()
+    copied = _copy_db(data_dir)
+    if copied is None:
+        return 0
+
+    tmp, con = copied
+    found = 0
+    try:
+        for paper in papers:
+            if paper.get("pdf_path"):
+                continue
+            item_id = _match_item(con, paper)
+            if item_id is None:
+                continue
+            path = _attachment_path(con, item_id, data_dir)
+            if path is None:
+                continue
+            paper["pdf_path"] = str(path)
+            found += 1
+    finally:
+        con.close()
+        tmp.cleanup()
+    return found
+
+
 def list_collections(data_dir: Path | None = None) -> list[dict]:
     """Return Zotero collections with their library-relative UI paths."""
     data_dir = Path(data_dir) if data_dir is not None else config.zotero_data_dir()

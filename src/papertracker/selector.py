@@ -342,6 +342,13 @@ updateCount();
 """
 
 
+def _blocker(template: summary_templates.SummaryTemplate) -> str:
+    """Short reason an option is disabled, sized to fit inside the control."""
+    if template.evidence == "fulltext":
+        return "needs PDF — not in your Zotero library"
+    return "needs an abstract — none available"
+
+
 def _card(
     i: int, paper: dict, templates, default_template: str
 ) -> str:
@@ -360,11 +367,16 @@ def _card(
         compatible, reason = _compatibility(template, paper)
         label = template.label or template.id
         description = template.description
-        option_text = f"{label} [{template.evidence}]"
-        if description:
-            option_text += f" — {description}"
-        if not compatible:
-            option_text += f" — unavailable: {reason}"
+        if compatible:
+            option_text = f"{label} [{template.evidence}]"
+            if description:
+                option_text += f" — {description}"
+        else:
+            # The blocker goes first and stays short. A <select> truncates each
+            # option to the control's width, so a reason appended after the
+            # description is invisible exactly when it matters — the option
+            # reads as arbitrarily dead.
+            option_text = f"{label} [{_blocker(template)}]"
         option_title = description if compatible else f"{description} {reason}".strip()
         template_options += (
             f'<option value="{html.escape(template.id, quote=True)}"'

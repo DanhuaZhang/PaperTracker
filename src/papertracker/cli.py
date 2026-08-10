@@ -384,6 +384,37 @@ def _summary_template_options(
     return templates, override or default.id
 
 
+def _unlock_fulltext_templates(
+    papers: list[dict],
+    templates: tuple[summary_templates.SummaryTemplate, ...],
+) -> None:
+    """Point papers already in Zotero at their local PDF before the picker renders.
+
+    The picker disables any template asking for evidence a paper cannot supply.
+    Discovery papers carry an abstract and no ``pdf_path``, so without this every
+    ``fulltext`` template is greyed out — including for a paper sitting in the
+    user's own library with its PDF attached, which is the one case where the
+    deep templates are exactly what you want.
+
+    Best-effort by design: no Zotero, an unreadable database, or no match all
+    leave the papers untouched and the templates disabled, which is the state
+    the picker already renders correctly.
+    """
+    if not any(getattr(t, "evidence", "") == "fulltext" for t in templates):
+        return
+    try:
+        found = zotero.annotate_pdf_paths(papers)
+    except Exception as exc:  # a picker must not die over an optional lookup
+        log.debug("Zotero PDF lookup skipped: %s", exc)
+        return
+    if found:
+        log.info(
+            "Zotero: %d of %d paper(s) have a local PDF — full-text templates "
+            "are selectable for those",
+            found, len(papers),
+        )
+
+
 def _resolve_template_override(args: argparse.Namespace) -> tuple[str | None, int]:
     selected = getattr(args, "template", None)
     alias = getattr(args, "zotero_template", None)
@@ -518,6 +549,7 @@ def _run_profile(
 
     if args.select:
         templates, default_template = _summary_template_options("abstract", args)
+        _unlock_fulltext_templates(new_papers, templates)
         to_summarize = selector.select_papers(
             new_papers, templates, default_template
         )
@@ -678,6 +710,7 @@ def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Nam
 
     if args.select:
         templates, default_template = _summary_template_options("abstract", args)
+        _unlock_fulltext_templates(ranked, templates)
         to_summarize = selector.select_papers(
             ranked, templates, default_template
         )

@@ -62,7 +62,32 @@ def test_html_shows_labels_badges_descriptions_and_disabled_reasons(tmp_path):
     )
     assert '<select name="template_0"' in page
     assert "Rapid screen [abstract] — Uses the abstract" in page
-    assert "Deep read [fulltext] — Uses every PDF page" in page
-    assert "unavailable: readable local PDF required" in page
     assert 'value="deep" disabled' in page
     assert 'value="screen" selected' in page
+    # The blocker replaces the description in the visible text, because a
+    # <select> truncates to the control width and the reason is what the reader
+    # needs. The description survives in the tooltip.
+    assert "Deep read [needs PDF — not in your Zotero library]" in page
+    assert 'title="Uses every PDF page readable local PDF required"' in page
+
+
+def test_html_enables_fulltext_templates_once_a_pdf_is_attached(tmp_path):
+    """The reported bug: every deep template greyed out in the digest picker.
+
+    Discovery papers have an abstract and no ``pdf_path``, so the fulltext
+    templates were unselectable even for papers sitting in the user's Zotero
+    library. The CLI now resolves a local PDF before rendering; this is what the
+    picker must do once it has one.
+    """
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fake")
+    templates = _templates(tmp_path)
+
+    without = selector._render_html([{"title": "T", "abstract": "A"}], templates, "screen")
+    with_pdf = selector._render_html(
+        [{"title": "T", "abstract": "A", "pdf_path": str(pdf)}], templates, "screen"
+    )
+
+    assert 'value="deep" disabled' in without
+    assert 'value="deep" disabled' not in with_pdf
+    assert "Deep read [fulltext] — Uses every PDF page" in with_pdf

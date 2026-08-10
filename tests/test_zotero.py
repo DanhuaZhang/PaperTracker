@@ -152,6 +152,50 @@ def test_find_pdf_missing_data_dir(tmp_path):
     assert zotero.find_pdf({"doi": "x", "title": "y"}, data_dir=tmp_path / "nope") is None
 
 
+def test_annotate_pdf_paths_matches_and_leaves_the_rest(tmp_path):
+    data_dir = _make_zotero(tmp_path, doi="10.1/xyz", title="A Paper", filename="a.pdf")
+    papers = [
+        {"doi": "10.1/XYZ", "title": "matched by doi", "abstract": "x"},
+        {"doi": "", "title": "A Paper", "abstract": "x"},
+        {"doi": "10.9/none", "title": "Not In The Library", "abstract": "x"},
+    ]
+
+    found = zotero.annotate_pdf_paths(papers, data_dir=data_dir)
+
+    assert found == 2
+    assert papers[0]["pdf_path"].endswith("a.pdf")
+    assert papers[1]["pdf_path"].endswith("a.pdf")
+    assert "pdf_path" not in papers[2]
+
+
+def test_annotate_pdf_paths_copies_the_database_once(tmp_path, monkeypatch):
+    """Twenty candidates must not mean twenty copies of a multi-hundred-MB file."""
+    data_dir = _make_zotero(tmp_path, doi="10.1/xyz", title="A Paper", filename="a.pdf")
+    copies = []
+    real_copy_db = zotero._copy_db
+    monkeypatch.setattr(
+        zotero, "_copy_db", lambda d: (copies.append(d), real_copy_db(d))[1]
+    )
+
+    papers = [{"doi": "10.1/xyz", "title": f"p{i}", "abstract": "x"} for i in range(20)]
+    assert zotero.annotate_pdf_paths(papers, data_dir=data_dir) == 20
+    assert len(copies) == 1
+
+
+def test_annotate_pdf_paths_preserves_an_existing_path(tmp_path):
+    data_dir = _make_zotero(tmp_path, doi="10.1/xyz", title="A Paper", filename="a.pdf")
+    papers = [{"doi": "10.1/xyz", "title": "x", "abstract": "x", "pdf_path": "/kept.pdf"}]
+
+    assert zotero.annotate_pdf_paths(papers, data_dir=data_dir) == 0
+    assert papers[0]["pdf_path"] == "/kept.pdf"
+
+
+def test_annotate_pdf_paths_without_a_library(tmp_path):
+    papers = [{"doi": "10.1/xyz", "title": "x", "abstract": "x"}]
+    assert zotero.annotate_pdf_paths(papers, data_dir=tmp_path / "nope") == 0
+    assert "pdf_path" not in papers[0]
+
+
 def test_list_collections_returns_full_paths(tmp_path):
     data_dir = _make_zotero_collections(tmp_path)
 
