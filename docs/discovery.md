@@ -28,8 +28,9 @@ member ID (`320` = ACM, `263` = IEEE) within a date window. Free, no auth.
 | Summarize | `claude` / `codex` CLI | subscription or API-key authentication | markdown summary |
 | Read the full PDF (later, by you) | DOI link → publisher site | your institution's access | the paper |
 
-Per-source limits, licensing, and reuse terms are in
-[Paper source APIs](paper-source-apis.md).
+Every source above is free to query without an account. Rate limits and reuse
+terms are set by each provider and change over time — check the provider's own
+documentation before relying on one heavily.
 
 ## Timing
 
@@ -70,6 +71,5 @@ rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"   # optional
 
 ## Next
 
-- [Paper source APIs](paper-source-apis.md) — per-source limits and licensing
 - [Configuration](configuration.md#relevance-filter) — what happens after fetch
 - [Privacy and data flow](privacy.md) — what leaves your machine

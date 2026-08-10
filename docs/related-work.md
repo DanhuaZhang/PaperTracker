@@ -103,4 +103,3 @@ composes with either.
 
 - [Use cases](use-cases.md) — building a related-work section for a paper
 - [Configuration](configuration.md#relevance-filter) — the scorer both modes use
-- [Explanation](explanation.md) — the similarity math in full

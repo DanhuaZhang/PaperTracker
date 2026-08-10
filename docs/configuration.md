@@ -156,8 +156,9 @@ source) spends about two minutes scoring, on **every** run, not just the first.
 That is the bulk of a typical run's wall clock. Narrow `arxiv_categories` or
 lower `--max-results` if you want it faster.
 
-For the formulas behind these scores, see
-[How PaperTracker computes similarity](explanation.md).
+Scores are cosine similarity between two normalized embeddings, so they land in
+roughly 0.4–0.9 in practice rather than spanning the full 0–1 range — which is
+why 0.65 is a sensible default cutoff and 0.2 would keep everything.
 
 ### Tuning
 
@@ -226,4 +227,4 @@ Where to get the optional keys: [Setup](setup.md#credentials--where-to-get-them)
 
 - [Customizing venues and sources](discovery.md#customizing-venues-and-sources)
 - [Summary templates](templates.md) — the formats summaries are written into
-- [Explanation](explanation.md) — the scoring math in full
+- [Related-work mode](related-work.md#two-ranking-modes) — the other ranking formula

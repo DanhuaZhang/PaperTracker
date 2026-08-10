@@ -52,7 +52,6 @@ see what a session actually looks like.
 | [How discovery works](docs/discovery.md) | Why no publisher login is needed; customizing venues |
 | [Privacy and data flow](docs/privacy.md) | What stays local and what leaves |
 | [Troubleshooting](docs/troubleshooting.md) | Common symptoms, plus Windows notes |
-| [Explanation](docs/explanation.md) | The similarity and ranking math in full |
 
 ## Prerequisites
 

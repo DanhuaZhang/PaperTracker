@@ -21,9 +21,11 @@ like, or [Setup](setup.md) if you just want it running.
 | Page | What it covers |
 |---|---|
 | [How discovery works](discovery.md) | Why no publisher login is needed; customizing venues |
-| [Paper source APIs](paper-source-apis.md) | Per-source limits, licensing, reuse terms |
 | [Privacy and data flow](privacy.md) | What stays local, what leaves, what goes to an AI provider |
-| [Explanation](explanation.md) | The similarity and ranking math in full |
+
+The ranking formulas themselves are documented where they are used:
+[Relevance filter](configuration.md#relevance-filter) for the daily digest, and
+[Two ranking modes](related-work.md#two-ranking-modes) for related work.
 
 ## Contributing to the docs
 
