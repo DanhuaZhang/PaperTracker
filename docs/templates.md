@@ -114,13 +114,8 @@ When stdin is a TTY, `--select` starts a short-lived HTTP server bound to
 it. Nothing is exposed off the machine, and the server closes as soon as you
 submit.
 
-<!-- SCREENSHOT SLOT: selector-daily.png — see docs/images/README.md
-<img src="images/selector-daily.png"
-     alt="The --select browser page: one row per paper with a checkbox, a colored relevance score badge, the title and venue, and a per-paper template dropdown."
-     width="820">
--->
-
-Each row carries a color-coded relevance score, the paper's title and venue, and
+The page is one row per paper, each with a checkbox to include it. Each row
+carries a color-coded relevance score, the paper's title and venue, and
 its own template dropdown, so one run can send different papers through
 different formats — a quick screen for most, a fuller one for the two that look
 important.

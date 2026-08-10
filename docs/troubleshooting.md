@@ -38,10 +38,9 @@ Common symptoms and their fixes, plus the platform-specific notes for Windows.
 Everything works the same; these are the differences worth knowing.
 
 **Paths.** `~` resolves to `C:\Users\<you>`, so the defaults land where you would
-expect: your personal config at `C:\Users\<you>\.config\papertracker\config.toml`
-and Zotero at `C:\Users\<you>\Zotero` — which is Zotero's own Windows default, so
-`zotero_data_dir` usually needs no change. Everything machine-local still lives
-in `user_data\` inside the checkout.
+expect: Zotero at `C:\Users\<you>\Zotero`, which is Zotero's own Windows default,
+so `zotero_data_dir` usually needs no change. Everything machine-local still
+lives in `user_data\` inside the checkout.
 
 **Long paths.** Digest filenames are short, but a deep checkout plus the
 `fastembed` model cache can approach the legacy 260-character limit. If you see

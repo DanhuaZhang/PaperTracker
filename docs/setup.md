@@ -198,6 +198,6 @@ Every variable PaperTracker reads is listed in
 
 ## Next
 
-- [Use cases](use-cases.md) — worked examples with screenshots
+- [Use cases](use-cases.md) — worked examples
 - [Usage](usage.md) — every flag, and what gets written where
 - [Configuration](configuration.md) — providers, models, effort, tuning

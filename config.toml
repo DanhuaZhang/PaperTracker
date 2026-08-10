@@ -46,6 +46,16 @@ arxiv_categories = ["cs.AI"]
 enabled_sources_default = ["arxiv", "ieee", "acm", "journal_rss"]
 priority_venue_only = false
 
+# DOI metadata providers, tried in the order listed. The first list recovers a
+# missing abstract and stops at the first hit; the second adds supplemental
+# metadata to relevant papers and consults every entry. Unknown names are
+# skipped with a warning. Optional API keys for these are environment-only —
+# see docs/configuration.md.
+abstract_fallbacks = [
+    "openalex", "semantic_scholar", "openaire", "core", "europe_pmc", "datacite",
+]
+doi_enrichers = ["unpaywall", "opencitations", "dblp", "datacite"]
+
 # Run and output defaults. Relative output paths resolve under user_data/.
 default_days = 2
 max_results_per_query = 1500

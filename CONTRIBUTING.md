@@ -43,9 +43,9 @@ alongside it or `uv sync --locked` fails in CI.
 ## Things worth knowing
 
 - `config.toml` at the repository root holds runtime defaults and is tracked.
-  Personal settings belong in `~/.config/papertracker/config.toml` or
-  `PAPERTRACKER_*` environment variables — please don't commit changes to
-  `config.toml` just to configure your own machine.
+  There is no per-user config file: API keys go in `PAPERTRACKER_*` environment
+  variables, and anything else you change for your own machine should stay
+  uncommitted rather than land in `config.toml`.
 - `summary_templates/abstract/` and `summary_templates/fulltext/` hold the
   single copy of the summary formats, split by the mode that offers them. A
   template's `evidence` metadata must match its folder. There is no packaged
@@ -68,9 +68,9 @@ pull request as the behavior it describes.
   ```
 
   A page opts in by having a `## Contents` heading; short pages skip it.
-- **Screenshots** go in `docs/images/`, which has its own
-  [capture checklist](docs/images/README.md) — including how to shoot them from
-  a throwaway demo profile so no real research ends up in a public image.
+- **No screenshots.** The docs are text only: describe the UI in prose and paste
+  real terminal output into a fenced block. That keeps every change reviewable
+  in a diff and keeps anyone's real library out of a public image.
 
 `tests/test_docs_links.py` fails on a dangling anchor, a link to a page that
 does not exist, an image that was referenced but never committed, or a stale

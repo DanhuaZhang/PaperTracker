@@ -42,7 +42,7 @@ see what a session actually looks like.
 
 | Page | What it covers |
 |---|---|
-| [Use cases](docs/use-cases.md) | Five workflows end to end, with screenshots |
+| [Use cases](docs/use-cases.md) | Five workflows end to end |
 | [Setup](docs/setup.md) | Install on macOS, Linux, Windows; optional free credentials |
 | [Usage](docs/usage.md) | Every CLI flag, what gets written where, scheduling |
 | [Configuration](docs/configuration.md) | Config file split, provider/model/effort precedence, relevance tuning, environment variables |
@@ -133,9 +133,9 @@ docs/                       # the manual
 user_data/                  # gitignored in full: topics, digests, state, caches
 ```
 
-Your own settings belong in `user_data/projects.toml`,
-`~/.config/papertracker/config.toml`, or `PAPERTRACKER_*` environment variables
-— not in the tracked `config.toml`. See
+Your topics belong in `user_data/projects.toml`, which is gitignored. API keys
+belong in `PAPERTRACKER_*` environment variables — never in a tracked file.
+Everything else is a runtime default in `config.toml`. See
 [Configuration](docs/configuration.md).
 
 PaperTracker runs **from a source checkout**. `uv tool install` is not

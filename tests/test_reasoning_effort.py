@@ -14,25 +14,17 @@ def _restore_module_effort():
     summarizer.set_reasoning_effort(original)
 
 
-def _isolate(monkeypatch, tmp_path, **files):
-    """Point both config layers at fixtures so the host machine cannot leak in."""
+def _isolate(monkeypatch, tmp_path, project=None):
+    """Point the config layer at a fixture so the host machine cannot leak in."""
     monkeypatch.delenv("PAPERTRACKER_EFFORT", raising=False)
-    for attr, name in (("CONFIG_PATH", "user"), ("PROJECT_CONFIG_PATH", "project")):
-        path = tmp_path / f"{name}.toml"
-        if name in files:
-            path.write_text(files[name], encoding="utf-8")
-        monkeypatch.setattr(settings, attr, path)
+    path = tmp_path / "project.toml"
+    if project is not None:
+        path.write_text(project, encoding="utf-8")
+    monkeypatch.setattr(settings, "PROJECT_CONFIG_PATH", path)
 
 
-def test_precedence_runs_cli_env_user_config_project_config_then_builtin(
-    monkeypatch, tmp_path
-):
-    _isolate(
-        monkeypatch,
-        tmp_path,
-        user='reasoning_effort = "high"\n',
-        project='reasoning_effort = "low"\n',
-    )
+def test_precedence_runs_cli_env_config_then_builtin(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path, project='reasoning_effort = "low"\n')
     monkeypatch.setattr(config, "REASONING_EFFORT", "medium")
 
     assert settings.resolve_effort("max")[0] == "max"
@@ -41,11 +33,6 @@ def test_precedence_runs_cli_env_user_config_project_config_then_builtin(
     assert settings.resolve_effort(None)[0] == "xhigh"
 
     monkeypatch.delenv("PAPERTRACKER_EFFORT")
-    effort, source = settings.resolve_effort(None)
-    assert effort == "high"
-    assert str(settings.CONFIG_PATH) in source
-
-    (tmp_path / "user.toml").write_text("", encoding="utf-8")
     effort, source = settings.resolve_effort(None)
     assert effort == "low"
     assert str(settings.PROJECT_CONFIG_PATH) in source
@@ -80,17 +67,17 @@ def test_every_layer_rejects_an_unsupported_level_by_name(
 
 
 def test_a_bad_value_in_a_config_file_names_the_file(monkeypatch, tmp_path):
-    _isolate(monkeypatch, tmp_path, user='reasoning_effort = "turbo"\n')
+    _isolate(monkeypatch, tmp_path, project='reasoning_effort = "turbo"\n')
 
     with pytest.raises(ValueError, match="turbo") as exc:
         settings.resolve_effort(None)
 
-    assert str(tmp_path / "user.toml") in str(exc.value)
+    assert str(tmp_path / "project.toml") in str(exc.value)
 
 
 def test_inherit_resolves_to_no_level_however_it_is_spelled(monkeypatch, tmp_path):
     """Callers get "nothing to forward" without knowing the sentinel's spelling."""
-    _isolate(monkeypatch, tmp_path, user='reasoning_effort = ""\n')
+    _isolate(monkeypatch, tmp_path, project='reasoning_effort = ""\n')
 
     assert settings.resolve_effort(settings.INHERIT_EFFORT)[0] is None
     assert settings.resolve_effort(None)[0] is None

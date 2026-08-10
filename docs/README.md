@@ -7,7 +7,7 @@ like, or [Setup](setup.md) if you just want it running.
 
 | Page | What it covers |
 |---|---|
-| [Use cases](use-cases.md) | Five workflows end to end, with screenshots |
+| [Use cases](use-cases.md) | Five workflows end to end |
 | [Setup](setup.md) | Install on macOS, Linux, Windows; optional free credentials |
 | [Usage](usage.md) | Every CLI flag, what gets written where, scheduling |
 | [Configuration](configuration.md) | Config file split, provider/model/effort precedence, relevance tuning, all environment variables |
@@ -34,8 +34,9 @@ in the same pull request as the behavior it describes.
 
 - Cross-page links are **relative** (`configuration.md#reasoning-effort`), which
   keeps them working on GitHub, in a local editor preview, and in a clone.
-- Screenshots go in [`images/`](images/README.md), which has the capture
-  checklist and the rules for keeping your own research out of them.
+- The docs are **text only** — no screenshots. Describe a UI in prose and show
+  real terminal output in a fenced block; both stay readable in a diff, survive
+  a redesign, and cannot leak a real library into a public image.
 - Long pages carry a generated table of contents. After adding a heading, run
   `uv run python scripts/update_toc.py`.
 - `tests/test_docs_links.py` fails on a dangling anchor, a missing page, a

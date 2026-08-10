@@ -148,17 +148,33 @@ OPENCITATIONS_ACCESS_TOKEN = os.environ.get(
 ).strip()
 
 
-def _env_source_list(name: str, default: str) -> tuple[str, ...]:
-    raw = os.environ.get(name, default)
+def _source_list(env_name: str, key: str, default: str) -> tuple[str, ...]:
+    """Ordered provider list: env var wins, then config.toml, then the built-in.
+
+    Accepts a TOML array or a comma-separated string in either layer, so the
+    env var and the config key are spelled differently but mean the same thing.
+    Read with .get rather than _cfg: a config.toml written before these keys
+    existed must still load, exactly as reasoning_effort does.
+    """
+    raw = os.environ.get(env_name)
+    if raw is None:
+        configured = _PROJECT_CONFIG.get(key, default)
+        if isinstance(configured, (list, tuple)):
+            return tuple(
+                str(part).strip().lower() for part in configured if str(part).strip()
+            )
+        raw = str(configured)
     return tuple(part.strip().lower() for part in raw.split(",") if part.strip())
 
 
-ABSTRACT_FALLBACK_SOURCES = _env_source_list(
+ABSTRACT_FALLBACK_SOURCES = _source_list(
     "PAPERTRACKER_ABSTRACT_FALLBACKS",
+    "abstract_fallbacks",
     "openalex,semantic_scholar,openaire,core,europe_pmc,datacite",
 )
-DOI_ENRICHMENT_SOURCES = _env_source_list(
+DOI_ENRICHMENT_SOURCES = _source_list(
     "PAPERTRACKER_DOI_ENRICHERS",
+    "doi_enrichers",
     "unpaywall,opencitations,dblp,datacite",
 )
 

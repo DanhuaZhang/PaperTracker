@@ -26,19 +26,30 @@ relevance filter.
 
 ## Which file holds what
 
-Repository defaults, personal provider choices, and topic profiles have a clear
-split:
+Repository defaults and topic profiles have a clear split:
 
 | File | Holds | Tracked in git? |
 |---|---|---|
 | `config.toml` | Runtime defaults: provider, models, effort, sources, thresholds, output paths, Zotero, templates | Yes — keep it topic-neutral |
 | `summary_templates/{abstract,fulltext}/*.md` | The summary formats, one file per dropdown option, foldered by the mode that offers it | Yes — edit in place |
 | `user_data/projects.toml` | Your topics, per-project overrides, and priority venues | No |
-| `~/.config/papertracker/config.toml` | Your provider, provider-specific model defaults, and reasoning effort | No — outside the checkout |
 
 Any field a project profile omits falls back to `config.toml`. Without a
 `user_data/projects.toml`, PaperTracker runs a single placeholder profile built
 entirely from `config.toml`.
+
+**There is no per-user config file.** An earlier version read
+`~/.config/papertracker/config.toml`; it no longer does, and a leftover copy is
+ignored. The rule is now one line:
+
+> **Secrets go in the environment. Everything else goes in `config.toml`.**
+
+Secrets are the four optional API keys, and they are environment-only on
+purpose — the only config file they could otherwise live in is tracked in git,
+where `.gitignore` offers no protection and a single `git add -A` publishes
+them. Every other setting is a parameter, so it belongs in a file that a
+teammate can read to understand a run, with a CLI flag or `PAPERTRACKER_*`
+variable to override it for one run or one shell.
 
 ## PaperTracker runs from a checkout
 
@@ -46,32 +57,34 @@ Always `uv run papertracker` from inside the clone. Its runtime defaults and its
 summary templates are files in the repository, so there is nothing to read from
 outside it — `uv tool install` is not supported and fails with a message saying
 so. To keep your data elsewhere, point `PAPERTRACKER_USER_DATA_DIR` at any
-directory; to override settings without editing the tracked `config.toml`, use
-`~/.config/papertracker/config.toml` or the `PAPERTRACKER_*` variables.
+directory; to override a setting without editing `config.toml`, use a CLI flag
+or the matching `PAPERTRACKER_*` variable.
 
 ## Choosing your AI provider — precedence
 
-CLI flag wins, then environment variable, then your personal config file, then
-the repo config.
+CLI flag wins, then environment variable, then `config.toml`.
 
 | Method | How | Persistence |
 |---|---|---|
 | CLI flag | `uv run papertracker --provider codex` | one run |
 | Env var | `export PAPERTRACKER_PROVIDER=codex` | per shell |
-| Personal config | `~/.config/papertracker/config.toml` → `provider = "codex"` | global user override |
-| Repo config | `config.toml` → `provider = "codex"` | project default |
+| Config file | `config.toml` → `provider = "codex"` | the default, until changed |
 
 `--model` and `PAPERTRACKER_MODEL` override the selected provider's configured
-default. In config files, set provider-specific defaults with `claude_model` and
-`codex_model`:
+default. In `config.toml`, set provider-specific defaults with `claude_model`
+and `codex_model`:
 
 ```toml
-# ~/.config/papertracker/config.toml
+# config.toml
 provider = "codex"
 claude_model = "sonnet"
 codex_model = "gpt-5.6-luna"
 reasoning_effort = "medium"
 ```
+
+`config.toml` is tracked, so changing it shows up in `git status` — that is the
+intended feedback, not a problem to work around. Keep a change local by leaving
+it uncommitted, or export the `PAPERTRACKER_*` variable instead.
 
 ## Reasoning effort
 
@@ -83,14 +96,13 @@ low  <  medium  <  high  <  xhigh  <  max
 
 Higher levels spend more quota and take longer per paper; nothing else about the
 run changes. It ships as `medium`, and follows the same precedence as the
-provider — CLI flag, env var, personal config, repo config:
+provider — CLI flag, env var, config file:
 
 | Method | How |
 |---|---|
 | CLI flag | `uv run papertracker --effort high` |
 | Env var | `export PAPERTRACKER_EFFORT=high` |
-| Personal config | `~/.config/papertracker/config.toml` → `reasoning_effort = "high"` |
-| Repo config | `config.toml` → `reasoning_effort = "high"` |
+| Config file | `config.toml` → `reasoning_effort = "high"` |
 
 Those five names are not a PaperTracker abstraction over two different
 vocabularies — they are the levels both CLIs already accept under exactly these
@@ -133,7 +145,7 @@ load it.
 |---|---|---|---|
 | `embedding_model` | `config.toml` | Scores every paper against your `topic_statement` | Daily and related-work scoring |
 | `reranker_model` | `config.toml` (per-profile override allowed) | Cross-encoder rerank of the top candidates | Only with `relevance_scorer = "hybrid"` **and** `enable_reranker = true` |
-| `claude_model` / `codex_model` | `config.toml`, or `~/.config/papertracker/config.toml` | Writes the summaries | Unless `--no-summarize` |
+| `claude_model` / `codex_model` | `config.toml` | Writes the summaries | Unless `--no-summarize` |
 
 There are two summarizer model keys rather than one because model names are not
 interchangeable between providers — this way `--provider codex` doesn't also
@@ -209,26 +221,46 @@ persists it for terminals opened afterwards — `setx` does not affect the sessi
 you run it in. PowerShell has no `VAR=value command` prefix form; set the
 variable on its own line first.
 
-The "If unset" column names the exact file and key each variable falls back to.
-Variables marked **env-only** have no config-file equivalent — the environment
-is the only place to set them.
+Every variable is **optional** — a fresh clone with none of them set runs fine,
+using anonymous API access and `user_data/` inside the checkout. They exist to
+override, not to enable.
+
+The "If unset" column names the exact key each one falls back to. Variables
+marked **env-only** have no config-file equivalent.
 
 | Variable | Purpose | If unset, falls back to |
 |---|---|---|
-| `PAPERTRACKER_USER_DATA_DIR` | Where topics, digests, state, and caches live | **env-only** — `<repo>/user_data` |
-| `PAPERTRACKER_PROVIDER` | `claude` or `codex` | `provider` in `~/.config/papertracker/config.toml`, then `provider` in `config.toml` (ships as `claude`) |
-| `PAPERTRACKER_MODEL` | Model for the selected provider | `claude_model` / `codex_model` in `~/.config/papertracker/config.toml`, then in `config.toml` (`sonnet` / `gpt-5.6-luna`) |
-| `PAPERTRACKER_EFFORT` | Thinking effort per summary, for either provider | `reasoning_effort` in `~/.config/papertracker/config.toml`, then in `config.toml` (ships as `medium`) |
+| `PAPERTRACKER_PROVIDER` | `claude` or `codex` | `provider` in `config.toml` (ships as `claude`) |
+| `PAPERTRACKER_MODEL` | Model for the selected provider | `claude_model` / `codex_model` in `config.toml` (`sonnet` / `gpt-5.6-luna`) |
+| `PAPERTRACKER_EFFORT` | Thinking effort per summary, for either provider | `reasoning_effort` in `config.toml` (ships as `medium`) |
 | `PAPERTRACKER_EMAIL` | Crossref/OpenAlex/Unpaywall identifier | `user_email` in `config.toml` (ships empty → anonymous requests) |
 | `PAPERTRACKER_ZOTERO_DIR` | Zotero data directory (holds `zotero.sqlite` + `storage/`) | `zotero_data_dir` in `config.toml` (`~/Zotero`) |
 | `PAPERTRACKER_ZOTERO_LINKED_BASE` | Base dir for Zotero linked attachments (ZotFile-style) | `zotero_linked_base` in `config.toml` (ships empty) |
+| `PAPERTRACKER_ABSTRACT_FALLBACKS` | Ordered DOI abstract providers | `abstract_fallbacks` in `config.toml` |
+| `PAPERTRACKER_DOI_ENRICHERS` | Providers applied to relevant, unseen DOIs | `doi_enrichers` in `config.toml` |
 | `PAPERTRACKER_OPENALEX_API_KEY` | Optional free OpenAlex key | **env-only** — anonymous |
 | `PAPERTRACKER_SEMANTIC_SCHOLAR_API_KEY` | Optional free Semantic Scholar key | **env-only** — anonymous |
 | `PAPERTRACKER_CORE_API_KEY` | Optional free CORE key | **env-only** — anonymous |
 | `PAPERTRACKER_OPENCITATIONS_ACCESS_TOKEN` | Optional free OpenCitations token | **env-only** — anonymous |
-| `PAPERTRACKER_ABSTRACT_FALLBACKS` | Ordered DOI abstract providers | **env-only** — `openalex,semantic_scholar,openaire,core,europe_pmc,datacite` |
-| `PAPERTRACKER_DOI_ENRICHERS` | Providers applied to relevant, unseen DOIs | **env-only** — `unpaywall,opencitations,dblp,datacite` |
+| `PAPERTRACKER_USER_DATA_DIR` | Where topics, digests, state, and caches live | **env-only** — `<repo>/user_data` |
 | `FASTEMBED_CACHE_PATH` | Override the embedding model cache location | **env-only** — `user_data/cache/fastembed` |
+
+The four keys are env-only because they are secrets. The last two are env-only
+because they name a location on one machine, which is not a fact about the
+project and does not belong in a tracked file.
+
+The two provider lists take a TOML array in `config.toml` and a comma-separated
+string in the environment; both are lowercased, and an unrecognized name is
+skipped with a warning rather than failing the run:
+
+```toml
+abstract_fallbacks = ["openalex", "semantic_scholar", "openaire", "core", "europe_pmc", "datacite"]
+doi_enrichers = ["unpaywall", "opencitations", "dblp", "datacite"]
+```
+
+```bash
+export PAPERTRACKER_ABSTRACT_FALLBACKS=openalex,semantic_scholar
+```
 
 Where to get the optional keys: [Setup](setup.md#credentials--where-to-get-them).
 

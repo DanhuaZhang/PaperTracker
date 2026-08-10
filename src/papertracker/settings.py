@@ -1,9 +1,12 @@
 """Provider/model/effort resolution with explicit precedence.
 
-Provider order: CLI flag, environment variable, personal config, project config.
-Model order: CLI flag, environment variable, then the selected provider's
-`claude_model` or `codex_model` key from personal config or project config.
-Effort order matches provider, reading the `reasoning_effort` key.
+Two layers, in this order: CLI flag, then environment variable, then the
+repository `config.toml`. Model reads the selected provider's `claude_model` or
+`codex_model` key; effort reads `reasoning_effort`.
+
+There is deliberately no per-user config file. Secrets belong in the
+environment, where they cannot be committed; every other setting belongs in
+`config.toml`, where one file explains a run.
 """
 from __future__ import annotations
 
@@ -13,7 +16,6 @@ from pathlib import Path
 
 from . import config
 
-CONFIG_PATH = Path.home() / ".config" / "papertracker" / "config.toml"
 PROJECT_CONFIG_PATH = config.PROJECT_CONFIG_PATH
 
 _VALID_PROVIDERS = ("claude", "codex")
@@ -62,16 +64,6 @@ def resolve_provider(cli_arg: str | None) -> tuple[str, str]:
             )
         return env, "env var PAPERTRACKER_PROVIDER"
 
-    toml_cfg = _load_toml_config(CONFIG_PATH)
-    if "provider" in toml_cfg:
-        prov = toml_cfg["provider"]
-        if prov not in _VALID_PROVIDERS:
-            raise ValueError(
-                f"Invalid provider in {CONFIG_PATH}: {prov!r}. "
-                f"Choose one of: {', '.join(_VALID_PROVIDERS)}"
-            )
-        return prov, f"config file {CONFIG_PATH}"
-
     project_cfg = _load_toml_config(PROJECT_CONFIG_PATH)
     if "provider" in project_cfg:
         prov = project_cfg["provider"]
@@ -95,10 +87,6 @@ def resolve_model(cli_arg: str | None, provider: str) -> tuple[str, str]:
         return env, "env var PAPERTRACKER_MODEL"
 
     model_key = f"{provider}_model"
-
-    toml_cfg = _load_toml_config(CONFIG_PATH)
-    if model_key in toml_cfg:
-        return toml_cfg[model_key], f"config file {CONFIG_PATH}"
 
     project_cfg = _load_toml_config(PROJECT_CONFIG_PATH)
     if model_key in project_cfg:
@@ -137,11 +125,6 @@ def resolve_effort(cli_arg: str | None) -> tuple[str | None, str]:
     if env is not None:
         origin = "env var PAPERTRACKER_EFFORT"
         return _validated_effort(env, origin), origin
-
-    toml_cfg = _load_toml_config(CONFIG_PATH)
-    if "reasoning_effort" in toml_cfg:
-        origin = f"config file {CONFIG_PATH}"
-        return _validated_effort(toml_cfg["reasoning_effort"], origin), origin
 
     project_cfg = _load_toml_config(PROJECT_CONFIG_PATH)
     if "reasoning_effort" in project_cfg:

@@ -42,12 +42,6 @@ can judge the cutoff at a glance:
         crossref · TPAMI · 2026-08-07 · https://doi.org/...
 ```
 
-<!-- SCREENSHOT SLOT: terminal-triage.png — see docs/images/README.md
-<img src="images/terminal-triage.png"
-     alt="Terminal listing of scored papers, each with a color-coded relevance score, title, priority-venue badge, source, and link."
-     width="820">
--->
-
 If the top of that list looks right, summarize — and pick papers individually
 rather than taking all of them:
 
@@ -59,12 +53,6 @@ That opens a browser tab on `127.0.0.1`. Tick the papers worth summarizing and
 set a template per paper. The dropdown lists the `abstract` templates — this is
 a triage pass over abstracts, so the full-text formats belong to
 [step 2](#2-deep-reading-a-shortlist) and are not offered here.
-
-<!-- SCREENSHOT SLOT: selector-daily.png — see docs/images/README.md
-<img src="images/selector-daily.png"
-     alt="The --select browser page: one row per paper with a checkbox, a colored relevance score badge, the title and venue, and a per-paper template dropdown."
-     width="820">
--->
 
 Output lands in `user_data/digests/<project-id>/YYYY-MM-DD.md`, grouped by
 priority venues first.
@@ -89,12 +77,6 @@ My Library
 │   └── Skimmed
 └── Inbox
 ```
-
-<!-- SCREENSHOT SLOT: zotero-collections.png — see docs/images/README.md
-<img src="images/zotero-collections.png"
-     alt="Zotero's sidebar showing a nested collection tree, with the Reading/Deep Reading collection selected."
-     width="420">
--->
 
 ```bash
 uv run papertracker --list-zotero-collections
