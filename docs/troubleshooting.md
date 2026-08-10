@@ -17,9 +17,10 @@ Common symptoms and their fixes, plus the platform-specific notes for Windows.
 |---|---|
 | `'claude' not found on PATH` | Install Claude Code (<https://claude.com/code>), then `claude auth login`. |
 | `'codex' not found on PATH` | Follow the [Codex CLI install guide](https://learn.chatgpt.com/docs/codex/cli), then `codex login`. |
-| Empty digest every day | Lower `--threshold` (try 0.6) or broaden `topic_statement`; try `--days 7`. The default is 0.7. |
+| `relevance filter [dense] @ 0.700: 0/N papers passed`, with N in the hundreds | Check first that the run is using **your** topic, not the placeholder — see the row below. Discovery working while *everything* scores below threshold is the signature of a missing `user_data/projects.toml`. |
+| Empty digest every day | Once you have confirmed the topic is yours, lower `--threshold` (try 0.6) or broaden `topic_statement`; try `--days 7`. The default is 0.7. |
 | Too much noise | Raise `--threshold` (try 0.75) or sharpen `topic_statement`. |
-| `--list-projects` shows nothing | You haven't created `user_data/projects.toml` — see [Setup step 4](setup.md#4-create-your-topics-file). |
+| `--list-projects` prints `(no user_data/projects.toml configured; using the placeholder topic from config.toml)` | You haven't created `user_data/projects.toml` — see [Setup step 4](setup.md#4-create-your-topics-file). The run still works, but it scores every paper against `config.toml`'s *"Describe your research topic here"* placeholder, which lands near 0.55 for real abstracts and so passes nothing at the 0.7 default. `user_data/` is git-ignored, so a second machine never inherits this file — copy it across yourself. |
 | First run is slow | It's downloading the ~65 MB embedding model into `user_data/cache/fastembed/`. `uv sync` does not fetch it. Cached afterwards. |
 | Log says `CrossRef[...]: capped at 1500 of N total` | The window held more ACM/IEEE papers than the cap. Raise `max_results_per_query` in `config.toml` or pass `--max-results`. Scoring is local, so the cost here is HTTP traffic and time. arXiv caps too but reports it as `arXiv: N entries returned (cap=1500)`. |
 | `Source journal_rss failed: every RSS feed failed` | Every configured feed was unreachable. If they are all ACM, that is expected — remove `rss` from ACM venues, which [cannot be fetched from a script](discovery.md#customizing-venues-and-sources). Otherwise check your connection. |
@@ -32,8 +33,10 @@ Common symptoms and their fixes, plus the platform-specific notes for Windows.
 | A paper you know was published never appeared | Crossref is queried by **publication** date, but publishers deposit 1–14 days later. A deposit that lands after your window has moved on is never revisited — run a wider `--days 14` sweep periodically. [Details](discovery.md#timing). |
 | Inspect matches without spending quota | `--no-summarize`, which sorts by relevance score. |
 | Windows: `uv` not recognized | Reopen the terminal after installing, so `PATH` is re-read. |
+| Windows: `uv` works in a PowerShell window but not in the VS Code terminal | VS Code is holding a pre-install copy of the environment — [details](#windows-notes). Quit it completely (**File → Exit**, then confirm no `Code.exe` survives in Task Manager); reloading the window keeps the same stale process. |
 | Windows: `running scripts is disabled on this system` | PowerShell's execution policy blocked the uv installer. Use the `winget` line instead, or run the installer exactly as written — its `-ExecutionPolicy ByPass` applies to that one command only. |
 | Windows: writing the digest fails with a permission error | The target `.md` is open in another program (Obsidian, Word). Windows locks open files against replacement; close it and rerun. |
+| Windows: first run logs `[WinError 1314] A required privilege is not held by the client` and `Could not download model from HuggingFace` | The embedding-model download tried to create a symlink. `setx HF_HUB_DISABLE_SYMLINKS 1`, open a new terminal, and rerun — [details](#windows-notes). |
 
 ## Windows notes
 
@@ -48,6 +51,45 @@ lives in `user_data\` inside the checkout.
 `fastembed` model cache can approach the legacy 260-character limit. If you see
 errors mentioning a path length, either clone nearer the drive root (`C:\src\`)
 or [enable long paths](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation).
+
+**Symlinks, and the first model download.** The HuggingFace cache keeps one copy
+of each file under `blobs/` and points `snapshots/` at it with a relative
+symlink. On Windows, creating a symlink requires a privilege that ordinary
+accounts do not hold, so `huggingface_hub` probes the cache directory once and
+falls back to copying — that is the `does not support them` warning, which is
+harmless. What is not harmless is that it marks the directory as symlink-capable
+*before* running the probe, while `fastembed` is downloading the model's five
+files in parallel. A sibling thread reading that optimistic answer calls
+`os.symlink` for real and gets:
+
+```
+ERROR fastembed.common.model_management:download_model - Could not download model
+from HuggingFace: [WinError 1314] A required privilege is not held by the client
+```
+
+`fastembed` then tries its own mirror, and makes three attempts in total. The
+probe has usually recorded the real answer by the second one, so the download
+often succeeds on a retry and the run continues — but it can also exhaust the
+attempts and fail. Remove the race by disabling symlinks before the first run:
+
+```powershell
+setx HF_HUB_DISABLE_SYMLINKS 1        # persists (new terminals)
+$env:HF_HUB_DISABLE_SYMLINKS = "1"    # or just this session
+```
+
+`huggingface_hub` then copies files instead of linking them, at the cost of
+losing cross-revision deduplication — irrelevant for one 65 MB model.
+Alternatively, enable
+[Developer Mode](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development)
+(Settings → System → For developers), which grants the privilege and lets the
+symlink path work as designed. Running the shell as administrator also works and
+is the worst of the three.
+
+`HF_HUB_DISABLE_SYMLINKS_WARNING=1` is a different variable — it silences the
+warning without preventing the error. If a failed download left a half-written
+cache, delete `user_data\cache\fastembed\` and rerun. PaperTracker clears it for
+you only in the narrow case where the missing file is the ONNX weights itself, or
+where `fastembed` reports the download as corrupted; anything else it surfaces.
 
 **Console encoding.** PaperTracker forces UTF-8 on its own output, so
 `uv run papertracker > digest.txt` keeps accented author names and the ★ badge

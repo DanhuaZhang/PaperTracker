@@ -143,6 +143,19 @@ describing your research in your own words. This is what every paper's title and
 abstract gets compared against, so specific beats short. `projects.example.toml`
 documents every field inline.
 
+**Do not skip this step, and do not skip the editing.** Without the file,
+PaperTracker falls back to the placeholder `topic_statement` in `config.toml`
+(*"Describe your research topic here…"*), and the copy you just made carries
+placeholder prose of its own. Either way the run looks completely healthy —
+sources answer, hundreds of papers are fetched and deduplicated — and then
+scores every one of them near 0.55 against text about describing a topic, which
+is below the 0.7 threshold. The symptom is `0/N papers passed` and an empty
+digest, not an error. `--list-projects` tells you which of the two you are on.
+
+Setting up a second machine? `user_data/` is git-ignored, so cloning does not
+bring your topics with it. Copy `user_data/projects.toml` over from the other
+machine rather than writing it again.
+
 [Use cases](use-cases.md) shows worked `topic_statement` examples and what each
 one pulls in.
 
@@ -181,6 +194,27 @@ prints matches with their scores to stdout without spending any quota.
 download from HuggingFace on the first scoring call (~65 MB) into
 `user_data/cache/fastembed/`. So the first run needs network access, and every
 run after it works offline for scoring.
+
+**Windows — set one variable before that first run.** HuggingFace's cache points
+`snapshots/` at `blobs/` with symlinks, and creating a symlink on Windows needs a
+privilege that ordinary accounts do not hold. `huggingface_hub` is meant to
+notice and copy instead, but it probes for symlink support while `fastembed` is
+already downloading the model's five files in parallel, so a sibling download can
+still attempt a real symlink and die with `[WinError 1314] A required privilege
+is not held by the client`. Disable symlinks outright and the race disappears:
+
+```powershell
+$env:HF_HUB_DISABLE_SYMLINKS = "1"    # this session only
+setx HF_HUB_DISABLE_SYMLINKS 1        # persists (new terminals)
+```
+
+The cost is a little disk — files are copied rather than deduplicated — which
+for one 65 MB model is nothing. Enabling
+[Developer Mode](https://learn.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development)
+grants the privilege instead, if you would rather keep the symlinks. Either way
+it only matters while the model downloads; once `user_data/cache/fastembed/` is
+populated, nothing symlinks again. See
+[Windows notes](troubleshooting.md#windows-notes) if the download already failed.
 
 If you see papers you care about, you're set.
 

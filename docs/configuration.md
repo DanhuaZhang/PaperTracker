@@ -273,10 +273,12 @@ marked **env-only** have no config-file equivalent.
 | `PAPERTRACKER_OPENCITATIONS_ACCESS_TOKEN` | Optional free OpenCitations token | **env-only** — anonymous |
 | `PAPERTRACKER_USER_DATA_DIR` | Where topics, digests, state, and caches live | **env-only** — `<repo>/user_data` |
 | `FASTEMBED_CACHE_PATH` | Override the embedding model cache location | **env-only** — `user_data/cache/fastembed` |
+| `HF_HUB_DISABLE_SYMLINKS` | Read by `huggingface_hub`, not by PaperTracker. Set to `1` on Windows so the model download copies files instead of symlinking them — see [Windows notes](troubleshooting.md#windows-notes) | **env-only** — symlinks attempted |
 
-The four keys are env-only because they are secrets. The last two are env-only
-because they name a location on one machine, which is not a fact about the
-project and does not belong in a tracked file.
+The four API keys are env-only because they are secrets.
+`PAPERTRACKER_USER_DATA_DIR` and `FASTEMBED_CACHE_PATH` are env-only because they
+name a location on one machine, which is not a fact about the project and does
+not belong in a tracked file.
 
 The two provider lists take a TOML array in `config.toml` and a comma-separated
 string in the environment; both are lowercased, and an unrecognized name is
