@@ -183,11 +183,21 @@ need no credential at all.
 
 | Environment variable | Where to get it | What it buys you |
 |---|---|---|
-| `PAPERTRACKER_EMAIL` | your own address | Crossref polite pool (higher, more reliable rate limits); also sent to OpenAlex and required by Unpaywall |
-| `PAPERTRACKER_OPENALEX_API_KEY` | <https://openalex.org/settings/api> | Free key, free daily usage allowance. Raises limits for related-work search and abstract lookup |
+| `PAPERTRACKER_EMAIL` | your own address | Crossref polite pool (higher, more reliable rate limits); required by Unpaywall. Also sent to OpenAlex, though OpenAlex no longer documents a mailto pool |
+| `PAPERTRACKER_OPENALEX_API_KEY` | <https://openalex.org/settings/api> | ~10× the anonymous daily usage allowance. The most worthwhile of these if you use related-work mode — see the note below |
 | `PAPERTRACKER_SEMANTIC_SCHOLAR_API_KEY` | <https://www.semanticscholar.org/product/api> — request form on that page | A dedicated rate limit instead of the shared anonymous pool |
 | `PAPERTRACKER_CORE_API_KEY` | <https://core.ac.uk/services/api> — register for a key | Better performance on CORE abstract lookups |
 | `PAPERTRACKER_OPENCITATIONS_ACCESS_TOKEN` | <https://opencitations.net/accesstoken> — enter an email, token is mailed to you | Identified API use; OpenCitations stores no personal data |
+
+**A note on OpenAlex.** It has moved to a freemium model since PaperTracker was
+first written: its
+[documentation](https://developers.openalex.org/guides/authentication) now
+describes a daily usage allowance — roughly **$0.10/day anonymously, 10× that
+with a free key**. Anonymous requests still succeed and PaperTracker needs no
+key, but OpenAlex is both the related-work candidate source and the first
+abstract fallback, so it is the one place where the free key does noticeable
+work. Access terms are the provider's to change; check the link before relying
+on anonymous access.
 
 Paper-source credentials above are free. AI summarization may consume
 subscription quota or incur API usage charges, depending on how your AI CLI is

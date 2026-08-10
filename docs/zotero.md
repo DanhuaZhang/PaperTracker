@@ -58,8 +58,12 @@ For both Claude and Codex, PaperTracker extracts text locally, preserves page
 labels, processes every extractable page in bounded chunks, recursively
 consolidates notes when needed, and only then fills the selected template. A
 missing or image-only PDF fails before an LLM call with an `OCR required`
-message; partially extractable PDFs continue with a warning. Output lands in
-`user_data/digests/<project-id>/zotero/<collection>/`.
+message; partially extractable PDFs continue with a warning.
+
+Output lands in `user_data/digests/<project-id>/zotero/<collection-slug>/`,
+where the slug is the collection path lowercased with every run of
+non-alphanumeric characters replaced by `-` — so `"Reading/Deep Reading"` writes
+to `zotero/reading-deep-reading/`.
 
 Because these are full-text runs, use a `fulltext` template — see
 [Summary templates](templates.md#writing-one).

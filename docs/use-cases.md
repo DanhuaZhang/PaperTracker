@@ -32,15 +32,21 @@ matches sorted by score, spending nothing. Scores are colored by band, so you
 can judge the cutoff at a glance:
 
 ```text
-  0.812  Learned Force Fields for Molecular Dynamics at Scale  ★ NeurIPS
-        arxiv · NeurIPS · 2026-08-08 · https://arxiv.org/abs/...
+  0.812  Spatial Grounding for Embodied Agents in Mixed Reality  ★ IEEE VR
+        ieee · 2026 IEEE Conference on Virtual Reality (VR) · 2026-08-08 · https://doi.org/...
 
   0.694  Message Passing Networks with Equivariant Attention
-        arxiv · n/a · 2026-08-08 · https://arxiv.org/abs/...
+        arxiv · — · 2026-08-08 · https://arxiv.org/abs/...
 
-  0.601  A Survey of Graph Pooling Operators
-        crossref · TPAMI · 2026-08-07 · https://doi.org/...
+  0.601  A Survey of Graph Pooling Operators  ACM Transactions on Computer-Human Interaction
+        acm · ACM Transactions on Computer-Human Interaction · 2026-08-07 · https://doi.org/...
 ```
+
+Reading a row: the second line starts with the **source** that found it —
+`arxiv`, `acm`, `ieee`, or `journal_rss` — followed by the venue the publisher
+deposited. A `★` after the title means the paper matched one of your
+`priority_venues`, and shows your short name for it. arXiv preprints carry no
+venue at all, so they show `—`.
 
 If the top of that list looks right, summarize — and pick papers individually
 rather than taking all of them:
@@ -115,7 +121,7 @@ annotations. See [Related-work mode](related-work.md).
 
 ## 4. Watching specific venues
 
-**You want:** never to miss a CHI or TVCG paper, and to care less about the rest.
+**You want:** to catch every CHI or TVCG paper, and to care less about the rest.
 
 Define the venues once at the top level of `user_data/projects.toml` and every
 profile inherits them:
@@ -130,16 +136,30 @@ patterns = ["CHI Conference on Human Factors", "CHI '"]
 name = "IEEE TVCG"
 publisher = "ieee"
 patterns = ["Transactions on Visualization and Computer Graphics"]
-rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"
 ```
 
 Those venues now (a) badge matching papers with `★` and sort them to the top of
-the digest, (b) enable `--priority-venues-only`, and (c) add an RSS source that
-often lands a day or two before the Crossref deposit.
+the digest, and (b) enable `--priority-venues-only`.
 
 ```bash
-uv run papertracker --priority-venues-only --days 7
+uv run papertracker --priority-venues-only --sources acm,ieee --days 14
 ```
+
+Three things about that command, each one a real limit rather than a
+suggestion:
+
+- **`--priority-venues-only` filters Crossref results only.** arXiv preprints
+  carry no venue, so they are never dropped by it. `--sources acm,ieee` is what
+  actually excludes them.
+- **`--days 14`, not `--days 2`.** Publishers deposit to Crossref 1–14 days
+  after publication, and PaperTracker queries by *publication* date — so a
+  late deposit falls outside a two-day window permanently. A wider window run
+  weekly is what makes "catch every paper" true; `seen.json` keeps it cheap.
+  [Why](discovery.md#timing).
+- **No `rss` line.** Adding one for an ACM or IEEE venue does nothing today:
+  ACM's feeds return a Cloudflare `403` to any script, and IEEE's carry no DOI
+  so every entry is dropped with a warning.
+  [Details](discovery.md#customizing-venues-and-sources).
 
 ## 5. Running without spending any quota
 

@@ -94,10 +94,13 @@ name = "ACM UIST"
 publisher = "acm"
 patterns = ["User Interface Software and Technology", "UIST '"]
 
-# Add `rss = "..."` to also poll a journal's RSS feed, which often lands 1–2 days
-# before the CrossRef deposit:
-# [[priority_venues]]
-# name = "IEEE TVCG"
-# publisher = "ieee"
-# patterns = ["Transactions on Visualization and Computer Graphics"]
-# rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"
+[[priority_venues]]
+name = "IEEE TVCG"
+publisher = "ieee"
+patterns = ["Transactions on Visualization and Computer Graphics"]
+
+# An optional `rss = "..."` polls a journal's feed directly, which can land 1–2
+# days before the CrossRef deposit. Do NOT add one for an ACM or IEEE venue:
+# ACM's feeds answer every script with a Cloudflare 403, and IEEE's carry no DOI
+# so every entry is dropped. Both publishers arrive via CrossRef regardless.
+# See docs/discovery.md#customizing-venues-and-sources before adding a feed.

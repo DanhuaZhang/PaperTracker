@@ -27,7 +27,9 @@ Common symptoms and their fixes, plus the platform-specific notes for Windows.
 | `RSS[<venue>]: all N entries carry no DOI` | The feed loaded but identifies papers by publisher URL, so nothing could be matched against Crossref. Known for IEEE Xplore — [details](discovery.md#customizing-venues-and-sources). Drop the `rss` line; the venue still arrives via Crossref. |
 | `--select` dropdown does not list the deep templates | By design — a discovery paper has no PDF to read. Save it to Zotero, then run `--zotero-collection` over that collection. [Details](templates.md#each-mode-offers-only-the-templates-it-can-run). |
 | `Template 'X' needs fulltext evidence, but this run supplies abstract` | `--template` named a deep template on a discovery run. Use `--zotero-collection` for full-text summaries, or name an `abstract` template here. |
-| Re-summarize a paper you already saw | `--ignore-seen`, or delete `user_data/state/<project-id>/seen.json`. |
+| Re-summarize a paper you already saw | `--ignore-seen --refresh-summaries`. `--ignore-seen` alone brings the paper back but serves its **cached** summary; only `--refresh-summaries` calls the model again. |
+| `--priority-venues-only` still shows arXiv preprints | Working as built: the filter matches a publisher's `container-title`, and arXiv records carry no venue. Add `--sources acm,ieee` to drop them. [Details](usage.md#all-cli-flags). |
+| A paper you know was published never appeared | Crossref is queried by **publication** date, but publishers deposit 1–14 days later. A deposit that lands after your window has moved on is never revisited — run a wider `--days 14` sweep periodically. [Details](discovery.md#timing). |
 | Inspect matches without spending quota | `--no-summarize`, which sorts by relevance score. |
 | Windows: `uv` not recognized | Reopen the terminal after installing, so `PATH` is re-read. |
 | Windows: `running scripts is disabled on this system` | PowerShell's execution policy blocked the uv installer. Use the `winget` line instead, or run the installer exactly as written — its `-ExecutionPolicy ByPass` applies to that one command only. |

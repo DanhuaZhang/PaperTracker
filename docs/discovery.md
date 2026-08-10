@@ -44,7 +44,7 @@ may hit it and what you may do with what comes back.
 |---|---|---|---|
 | [arXiv API](https://info.arxiv.org/help/api/user-manual.html) | `export.arxiv.org/api/query` | Pages of 100, 3 s between pages (arXiv asks for one request per 3 s on one connection); [terms of use](https://info.arxiv.org/help/api/tou.html) | Metadata is CC0. The papers themselves are **not** — each carries [its author's chosen license](https://info.arxiv.org/help/license/index.html). |
 | [Crossref Works](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) | `api.crossref.org/works` | Pages of 100, 0.5 s between pages, date-filtered queries | Almost all metadata is unrestricted, but *abstracts* deposited by publishers may be copyrighted. |
-| [OpenAlex Works](https://developers.openalex.org/api-reference/introduction) | `api.openalex.org/works` | Pages of 100 (50 for semantic search), 1 s between pages, topic truncated to 2000 chars | The dataset is CC0. |
+| [OpenAlex Works](https://developers.openalex.org/api-reference/introduction) | `api.openalex.org/works` | Pages of 100 (50 for semantic search), 1 s between pages, topic truncated to 2000 chars | The dataset is CC0. Access is now freemium — a daily usage allowance, larger with a free key. |
 | Journal RSS | publisher feed URLs you configure | One fetch per feed per run. Neither ACM's nor IEEE's feeds are usable today — [why](#customizing-venues-and-sources) | Publisher-provided. Titles and links are used for discovery only. |
 | Zotero | local `zotero.sqlite` | No network. Read-only copy — see [Zotero mode](zotero.md#your-library-is-never-modified) | Your own library, under whatever rights its items already carry. |
 
@@ -53,9 +53,20 @@ default); OpenAlex is capped by `--limit` and the facet settings. Retries back
 off on `429`/`503` rather than hammering.
 
 Setting `PAPERTRACKER_EMAIL` moves you into Crossref's polite pool and is
-required by Unpaywall. Optional free keys — OpenAlex, Semantic Scholar, CORE,
-OpenCitations — raise your own limits and nothing else; see
+required by Unpaywall. It is also sent to OpenAlex as `?mailto=`, though
+OpenAlex no longer documents a mailto-based polite pool — see below.
+
+Free keys — OpenAlex, Semantic Scholar, CORE, OpenCitations — raise your own
+limits and nothing else; see
 [Setup](setup.md#credentials--where-to-get-them).
+
+**OpenAlex is now a freemium service**, which is a change from when it was
+plainly open. Its [documentation](https://developers.openalex.org/guides/authentication)
+describes a daily usage allowance: roughly **$0.10/day of usage anonymously, or
+10× that with a free key**. Anonymous requests still succeed today, and
+PaperTracker works without a key, but OpenAlex feeds related-work search and the
+first abstract fallback — the two heaviest users of it — so a free key is worth
+having if you run either regularly.
 
 Rate limits, pricing tiers, and terms are set by each provider and change over
 time. The table records what the code does, not a promise about what the
@@ -68,7 +79,8 @@ Two chains run, for two different purposes. Both cache per `(provider, DOI)` for
 the run, and one provider failing never stops the ones after it.
 
 **Abstract fallback** — only when the discovery source returned no abstract.
-First provider that returns one wins. Default order, configurable via
+First provider that returns one wins. Default order, set by `abstract_fallbacks`
+in `config.toml` and overridable per shell with
 `PAPERTRACKER_ABSTRACT_FALLBACKS`:
 
 | Provider | Why it is in the chain |
@@ -81,8 +93,9 @@ First provider that returns one wins. Default order, configurable via
 | [DataCite](https://support.datacite.org/docs/api) | Datasets, software, preprints — rarely ACM/IEEE, which register via Crossref |
 
 **Enrichment** — runs only for papers that already cleared the relevance
-threshold and are unseen, so it costs nothing on the papers you filter out.
-Configurable via `PAPERTRACKER_DOI_ENRICHERS`:
+threshold and are unseen, so it costs nothing on the papers you filter out. Set
+by `doi_enrichers` in `config.toml`, overridable with
+`PAPERTRACKER_DOI_ENRICHERS`:
 
 | Provider | Adds |
 |---|---|
@@ -94,9 +107,26 @@ Configurable via `PAPERTRACKER_DOI_ENRICHERS`:
 ## Timing
 
 arXiv preprints appear same-day, often weeks before the conference. Crossref
-ACM/IEEE deposits land within ~1–14 days of publication. Journal RSS feeds
-sometimes arrive 1–2 days before the Crossref deposit; DOI-based dedup merges
-them.
+ACM/IEEE deposits land within ~1–14 days of publication.
+
+**A late deposit can be missed entirely, and this is the one real gap in
+discovery.** PaperTracker filters Crossref by *publication* date
+(`from-pub-date`/`until-pub-date`), not by deposit date. A paper published on the
+1st but deposited on the 10th is invisible to every run whose window has already
+moved past the 1st — the daily run on the 10th asks for papers published on the
+9th and 10th, and never sees it.
+
+The default two-day window therefore catches only deposits that arrive within two
+days of publication. Two ways to close the gap:
+
+```bash
+uv run papertracker --days 14           # periodic wider sweep; dedup drops repeats
+uv run papertracker --days 14 --no-summarize   # or just check what you missed
+```
+
+A weekly `--days 14` run costs one extra fetch and nothing else: papers already
+in `seen.json` are skipped, so only genuinely new arrivals reach the summarizer.
+Filtering by deposit date instead would fix this properly and is not implemented.
 
 If the discovery source and every configured fallback lack an abstract, the
 paper is **skipped silently** — no summary is attempted on a title alone.
@@ -124,13 +154,16 @@ patterns = ["CHI Conference on Human Factors", "CHI '"]
 name = "IEEE TVCG"
 publisher = "ieee"
 patterns = ["Transactions on Visualization and Computer Graphics"]
-rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"   # optional
 
 [[priority_venues]]
 name = "ACM TOG"
 publisher = "acm"
-patterns = ["Transactions on Graphics"]   # no rss — see below
+patterns = ["Transactions on Graphics"]
 ```
+
+No `rss` line appears above, and that is deliberate: **neither ACM nor IEEE feeds
+work today**, for two different reasons explained below. Add `rss` only for a
+publisher whose feed carries a DOI.
 
 **ACM Digital Library feeds do not work from a script.** Every request to
 `dl.acm.org` — feed URLs included — is answered with a Cloudflare browser
@@ -164,6 +197,12 @@ or a DOI anywhere in the link or summary.
 An `rss` entry is always optional. Without one a venue still tags papers with
 its `★` badge and still works with `--priority-venues-only` — it just waits for
 the Crossref deposit.
+
+A feed that *does* carry DOIs can land 1–2 days before the Crossref deposit, and
+DOI-based dedup merges the two into one entry. That is the mechanism `rss`
+exists for. It simply has no working example among the ACM and IEEE venues most
+users configure, so treat the head start as a property of a good feed rather
+than something you should expect to get.
 
 ## Next
 

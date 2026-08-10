@@ -162,9 +162,12 @@ Two local, non-LLM scorers:
   score, using `hybrid_relevance_threshold`. Can optionally add a local
   cross-encoder reranker.
 
-The model runs on CPU/ANE. Measured on Apple Silicon, it scores roughly 100
-abstracts every 8 seconds — so a full default fetch (up to 1500 papers per
-source) spends about two minutes scoring, on **every** run, not just the first.
+The model runs on the **CPU**. PaperTracker passes no ONNX execution provider,
+so `fastembed` uses `CPUExecutionProvider` — there is no GPU, CUDA, or Apple
+Neural Engine path, on any platform. Measured on Apple Silicon, it scores
+roughly 100 abstracts every 8 seconds — so a full default fetch (up to 1500
+papers per source) spends about two minutes scoring, on **every** run, not just
+the first.
 That is the bulk of a typical run's wall clock. Narrow `arxiv_categories` or
 lower `--max-results` if you want it faster.
 
@@ -180,6 +183,21 @@ cosine. `hybrid_relevance_threshold` (0.60) is compared against
 component whether or not it is any good. A hybrid score is therefore relative to
 the run it came from, and 0.7 there would be far stricter than 0.7 on the dense
 scale, not equivalent to it.
+
+**With `enable_reranker = true`, the number the threshold sees changes again.**
+The hybrid score above ranks the candidates, then the top `reranker_top_k` (100)
+are re-scored by the cross-encoder and blended:
+
+```text
+final = 0.35·hybrid + 0.65·reranker_norm      # top reranker_top_k only
+final = hybrid                                # everything below the cut
+```
+
+`hybrid_relevance_threshold` is compared against `final`, so with reranking on it
+grades two different quantities in the same run — a blended score near the top of
+the batch and a plain hybrid score below it. Retune the threshold after switching
+reranking on or off rather than carrying a number across; `--threshold -1` with
+`--no-summarize` shows the new distribution.
 
 ### Tuning
 

@@ -23,8 +23,8 @@ uv run papertracker --all-projects         # every topic
 uv run papertracker --days 7               # wider window
 uv run papertracker --sources arxiv        # one source at a time
 uv run papertracker --no-summarize         # list matches, no LLM calls
-uv run papertracker --priority-venues-only # only papers in your priority venues
-uv run papertracker --ignore-seen --days 14   # re-summarize already-seen papers
+uv run papertracker --priority-venues-only # narrow ACM/IEEE to your venues (arXiv unaffected)
+uv run papertracker --ignore-seen --refresh-summaries --days 14  # re-summarize seen papers
 uv run papertracker --select               # choose papers and templates in a browser tab
 uv run papertracker --related-work         # all-time important work for the topic
 uv run papertracker --related-work --facets # grouped related-work matrix
@@ -65,10 +65,10 @@ read it before installing.
 | Flag | Default | Effect |
 |---|---|---|
 | `--sources a,b` | `enabled_sources_default` | Restrict to `arxiv`, `ieee`, `acm`, `journal_rss` |
-| `--priority-venues-only` | `priority_venue_only` (false) | Drop papers matching no priority venue |
+| `--priority-venues-only` | `priority_venue_only` (false) | Drop **Crossref** papers matching no priority venue. arXiv is unaffected — see below |
 | `--threshold F` | `relevance_threshold` (0.7) | Override the relevance cutoff. `-1` keeps everything |
 | `--scorer dense\|hybrid` | `relevance_scorer` (`dense`) | Which local scorer to use |
-| `--ignore-seen` | off | Re-process papers already in `seen.json` |
+| `--ignore-seen` | off | Make papers in `seen.json` eligible again. Cached summaries are still reused — pair with `--refresh-summaries` to regenerate |
 
 **Summarization**
 
@@ -101,7 +101,21 @@ read it before installing.
 
 `--ignore-seen` and `--refresh-summaries` are different: the first controls
 *which papers are considered*, the second controls *whether a cached summary is
-reused* for papers that are processed.
+reused* for papers that are processed. **Neither one alone re-writes a
+summary.** `--ignore-seen` brings a paper back into the run and then serves its
+cached summary unchanged; only `--refresh-summaries` calls the model again:
+
+```bash
+uv run papertracker --ignore-seen --refresh-summaries --days 14
+```
+
+`--priority-venues-only` filters **Crossref results only**. Priority venues are
+matched against the `container-title` a publisher deposits, and arXiv records
+carry no venue at all — every arXiv preprint has `venue = None`, and the filter
+that drops unmatched papers runs inside the Crossref client. So the flag narrows
+the ACM and IEEE half of a run and leaves the arXiv half untouched. To get only
+priority-venue papers, combine it with `--sources acm,ieee`. Related-work mode
+sources from OpenAlex and does not apply the filter either.
 
 ## Where your data lives
 
