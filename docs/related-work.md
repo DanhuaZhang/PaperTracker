@@ -15,6 +15,7 @@ digest would never surface.
       <ul>
         <li><a href="#flat----related-work">Flat — --related-work</a></li>
         <li><a href="#faceted----related-work---facets">Faceted — --related-work --facets</a></li>
+        <li><a href="#what-facetsjson-contains">What .facets.json contains</a></li>
       </ul>
     </details>
   </li>
@@ -73,6 +74,8 @@ score = 0.42·facet_relevance + 0.30·project_relevance + 0.18·citation
       + source_bonus + multifacet_bonus + hit_bonus
 ```
 
+- `source_bonus` — `0.035` per *extra* source that surfaced the paper, capped at
+  two, the faceted counterpart of the flat mode's `channel_bonus`
 - `multifacet_bonus` — `0.025` per additional facet the paper matched, capped at
   three; papers spanning facets rank higher
 - `hit_bonus` — `0.04` if OpenAlex surfaced the paper under *this* facet's query
@@ -88,6 +91,28 @@ or metadata alone.
 Output is `.facets.md` (a candidate matrix grouped by facet) plus `.facets.json`
 for programmatic use. Control breadth with `--facet-count` and
 `--facet-candidates`.
+
+### What `.facets.json` contains
+
+One object per candidate. Alongside the bibliographic fields (`canonical_id`,
+`title`, `authors`, `year`, `published`, `venue`, `doi`, `url`, `openalex_id`,
+`cited_by_count`) each carries the scoring and annotation state:
+
+| Field | Meaning |
+|---|---|
+| `related_work_score` | The combined score above — ordering only, not a probability |
+| `project_relevance_score` | Paper scored against the project `topic_statement` |
+| `facet_relevance_score` | The same paper scored against its `primary_facet`'s text |
+| `facet_hits` | Facet id → the sources that surfaced the paper under that facet |
+| `primary_facet` | The facet this row was selected under |
+| `discovery_sources` | Every channel that surfaced the paper |
+| `role` | One of `foundational`, `method`, `benchmark`, `system`, `application`, `contrast`, `recent`, `background`. A closed vocabulary — anything else the model returns is normalized to `background`, which is also the value used when no LLM pass ran. |
+| `why_cite`, `difference_from_contribution` | The LLM's one-line justifications |
+| `evidence_basis` | `abstract` or `metadata-only` — whether the judgment saw an abstract |
+
+Two relevance numbers rather than one because the gate and the ranking use them
+differently: a paper can be weak on your overall topic yet be the right citation
+for one facet, and `.facets.json` keeps both so you can tell which happened.
 
 ## A faceted run without any LLM call
 

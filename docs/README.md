@@ -20,7 +20,7 @@ like, or [Setup](setup.md) if you just want it running.
 
 | Page | What it covers |
 |---|---|
-| [How discovery works](discovery.md) | Why no publisher login is needed; customizing venues |
+| [How discovery works](discovery.md) | Why no publisher login is needed; every source with its rate limits and reuse terms; customizing venues |
 | [Privacy and data flow](privacy.md) | What stays local, what leaves, what goes to an AI provider |
 
 The ranking formulas themselves are documented where they are used:

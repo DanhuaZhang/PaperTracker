@@ -49,7 +49,7 @@ see what a session actually looks like.
 | [Summary templates](docs/templates.md) | Writing formats, and how the `--select` UI presents them |
 | [Zotero PDF batch mode](docs/zotero.md) | Full-text summaries from your local library |
 | [Related-work mode](docs/related-work.md) | Starter bibliographies and the two ranking formulas |
-| [How discovery works](docs/discovery.md) | Why no publisher login is needed; customizing venues |
+| [How discovery works](docs/discovery.md) | Why no publisher login is needed; every source with its limits and reuse terms |
 | [Privacy and data flow](docs/privacy.md) | What stays local and what leaves |
 | [Troubleshooting](docs/troubleshooting.md) | Common symptoms, plus Windows notes |
 
@@ -151,7 +151,8 @@ uv run ruff check src tests scripts # lint
 uv build                            # the wheel/sdist build must succeed
 ```
 
-CI runs those plus `uv sync --locked` on Ubuntu, macOS, and Windows. Tests are
+`.github/workflows/ci.yml` runs those plus `uv sync --locked` on Ubuntu, macOS,
+and Windows. Tests are
 offline and stub every HTTP call — nothing in the suite touches arXiv, Crossref,
 HuggingFace, or an AI CLI.
 

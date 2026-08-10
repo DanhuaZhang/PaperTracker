@@ -39,7 +39,10 @@ If two collections share a leaf name, use the full path. An optional
 `My Library/` prefix is accepted and ignored.
 
 Zotero's data directory is `~/Zotero` by default on macOS, Linux, and Windows
-alike. Point `PAPERTRACKER_ZOTERO_DIR` elsewhere if you moved it.
+alike — it holds `zotero.sqlite` and `storage/`. Point
+`PAPERTRACKER_ZOTERO_DIR` elsewhere if you moved it; Zotero's own
+[data directory guide](https://www.zotero.org/support/zotero_data) shows where
+to check.
 
 ## Running it
 
@@ -68,6 +71,10 @@ The Zotero database is opened **read-only**: PaperTracker copies
 `mode=ro`. Zotero holds a lock on the live database while it runs, and the copy
 is what makes the read safe. Nothing is written back, and the temporary copy is
 deleted when the run ends.
+
+This is the approach Zotero itself prescribes for third-party tools — see
+[direct SQLite access](https://www.zotero.org/support/dev/client_coding/direct_sqlite_database_access),
+which asks that external readers never touch the live file.
 
 ## Next
 
