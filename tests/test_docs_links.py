@@ -9,6 +9,7 @@ should catch instead.
 import re
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,23 @@ def _pages() -> list[Path]:
         REPO_ROOT / "CONTRIBUTING.md",
         *sorted((REPO_ROOT / "docs").rglob("*.md")),
     ]
+
+
+@lru_cache(maxsize=1)
+def _tracked() -> tuple[frozenset[str], frozenset[str]]:
+    """Return (tracked files, directories containing them), repo-relative.
+
+    Link targets are checked against git rather than the filesystem on purpose.
+    A link to a gitignored path — `user_data/projects.toml`, say — resolves
+    fine on the machine of whoever wrote it and is broken for every reader who
+    has not set the tool up yet. Testing existence on disk would only catch
+    that in CI, which is the slowest possible place to learn it.
+    """
+    out = subprocess.run(
+        ["git", "ls-files"], capture_output=True, text=True, cwd=REPO_ROOT, check=True
+    ).stdout.split()
+    dirs = {parent.as_posix() for f in out for parent in Path(f).parents}
+    return frozenset(out), frozenset(dirs)
 
 
 def _visible(text: str) -> str:
@@ -79,6 +97,7 @@ def test_every_in_page_anchor_resolves(page):
 
 @pytest.mark.parametrize("page", _pages(), ids=lambda p: str(p.relative_to(REPO_ROOT)))
 def test_every_cross_page_link_resolves(page):
+    files, dirs = _tracked()
     problems = []
     for target in _links(page):
         if EXTERNAL.match(target):
@@ -87,8 +106,10 @@ def test_every_cross_page_link_resolves(page):
         if not rel:
             continue
         destination = (page.parent / rel).resolve()
-        if not destination.exists():
-            problems.append(f"{target} → no such file")
+        key = destination.relative_to(REPO_ROOT).as_posix()
+        if key not in files and key not in dirs:
+            hint = " (exists but is not tracked)" if destination.exists() else ""
+            problems.append(f"{target} → not in the repository{hint}")
             continue
         # A fragment is only checkable when the destination is Markdown.
         if fragment and destination.suffix == ".md":
@@ -99,13 +120,7 @@ def test_every_cross_page_link_resolves(page):
 
 def test_every_referenced_image_is_committed():
     """A screenshot referenced but never added renders as a broken image."""
-    tracked = subprocess.run(
-        ["git", "ls-files", "docs/images"],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-        check=True,
-    ).stdout.split()
+    tracked, _ = _tracked()
 
     problems = []
     for page in _pages():
