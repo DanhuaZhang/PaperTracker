@@ -1,4 +1,6 @@
+import argparse
 import logging
+from pathlib import Path
 
 from papertracker import cli, config, summary_templates
 
@@ -100,7 +102,16 @@ def test_template_and_deprecated_alias_conflict_before_profiles(monkeypatch, cap
 def test_deprecated_alias_sets_same_global_override(monkeypatch, caplog):
     captured = []
     monkeypatch.setattr(config, "summary_template_catalog", lambda: ((), None))
-    monkeypatch.setattr(config, "summary_template", lambda selected: captured.append(selected))
+    # Returns a real template: main() checks its evidence against the mode, and
+    # --zotero-collection is the fulltext one.
+    monkeypatch.setattr(
+        config,
+        "summary_template",
+        lambda selected: captured.append(selected)
+        or summary_templates.SummaryTemplate(
+            selected, Path(f"{selected}.md"), selected, "d", "fulltext", "## B"
+        ),
+    )
     monkeypatch.setattr(cli, "_resolve_profiles", lambda args: ([], 0))
     with caplog.at_level(logging.WARNING):
         assert cli.main(
@@ -128,40 +139,63 @@ def _tpl(tmp_path, template_id, evidence):
     )
 
 
-def test_unlock_fulltext_templates_annotates_papers_from_zotero(tmp_path, monkeypatch):
-    templates = (_tpl(tmp_path, "screen", "abstract"), _tpl(tmp_path, "deep", "fulltext"))
-    papers = [{"doi": "10.1/a", "title": "A"}]
-
-    def fake(ps):
-        ps[0]["pdf_path"] = "/tmp/a.pdf"
-        return 1
-
-    monkeypatch.setattr(cli.zotero, "annotate_pdf_paths", fake)
-    cli._unlock_fulltext_templates(papers, templates)
-    assert papers[0]["pdf_path"] == "/tmp/a.pdf"
-
-
-def test_unlock_fulltext_templates_skips_lookup_without_a_fulltext_template(
-    tmp_path, monkeypatch
-):
-    """No fulltext template on offer means nothing to unlock — and a Zotero
-    library is large enough that copying it for no reason is a real cost."""
-    called = []
-    monkeypatch.setattr(
-        cli.zotero, "annotate_pdf_paths", lambda ps: called.append(True) or 0
+def _catalog(tmp_path, monkeypatch):
+    """Two abstract templates and two fulltext ones, so filtering is visible."""
+    templates = (
+        _tpl(tmp_path, "screen", "abstract"),
+        _tpl(tmp_path, "triage", "abstract"),
+        _tpl(tmp_path, "deep-tech", "fulltext"),
+        _tpl(tmp_path, "deep-study", "fulltext"),
     )
-    cli._unlock_fulltext_templates([{"doi": "10.1/a"}], (_tpl(tmp_path, "screen", "abstract"),))
-    assert called == []
-
-
-def test_unlock_fulltext_templates_survives_a_broken_library(tmp_path, monkeypatch):
-    """An optional lookup must never take the picker down with it."""
-    templates = (_tpl(tmp_path, "deep", "fulltext"),)
+    defaults = {"abstract": templates[0], "fulltext": templates[2]}
     monkeypatch.setattr(
-        cli.zotero,
-        "annotate_pdf_paths",
-        lambda ps: (_ for _ in ()).throw(OSError("database is locked")),
+        config,
+        "summary_template_catalog",
+        lambda evidence="abstract": (templates, defaults[evidence]),
     )
-    papers = [{"doi": "10.1/a"}]
-    cli._unlock_fulltext_templates(papers, templates)
-    assert "pdf_path" not in papers[0]
+    return templates
+
+
+def test_each_mode_offers_only_its_own_evidence(tmp_path, monkeypatch):
+    """The mode boundary is the filter, not a per-option disabled attribute.
+
+    A discovery run holds an abstract and the Zotero batch holds a PDF, so each
+    picker should show the templates it can actually run and no others.
+    """
+    _catalog(tmp_path, monkeypatch)
+    args = argparse.Namespace(template_override=None, template=None, zotero_template=None)
+
+    abstract, abstract_default = cli._summary_template_options("abstract", args)
+    fulltext, fulltext_default = cli._summary_template_options("fulltext", args)
+
+    assert [t.id for t in abstract] == ["screen", "triage"]
+    assert [t.id for t in fulltext] == ["deep-tech", "deep-study"]
+    assert abstract_default == "screen"
+    assert fulltext_default == "deep-tech"
+
+
+def test_a_mode_still_offers_every_template_of_its_own_evidence(tmp_path, monkeypatch):
+    """Filtering must not collapse the choice — --select still picks per paper."""
+    _catalog(tmp_path, monkeypatch)
+    args = argparse.Namespace(template_override=None, template=None, zotero_template=None)
+    offered, _ = cli._summary_template_options("abstract", args)
+    assert len(offered) == 2
+
+
+def test_fulltext_template_on_a_discovery_run_is_rejected_once(caplog):
+    with caplog.at_level(logging.ERROR):
+        code = cli.main(["--template", "deep-technical", "--days", "1"])
+    assert code == 2
+    assert "needs fulltext evidence" in caplog.text
+    assert "--zotero-collection" in caplog.text
+    # One mode-level error, not one per paper.
+    assert caplog.text.count("needs fulltext evidence") == 1
+
+
+def test_abstract_template_on_a_zotero_run_is_rejected(caplog):
+    with caplog.at_level(logging.ERROR):
+        code = cli.main(
+            ["--zotero-collection", "Reading", "--template", "abstract-screen"]
+        )
+    assert code == 2
+    assert "needs abstract evidence" in caplog.text

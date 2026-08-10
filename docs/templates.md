@@ -13,7 +13,7 @@ each file is one option in the `--select` dropdown.
     <details open>
       <summary><a href="#how---select-presents-the-choice">How --select presents the choice</a></summary>
       <ul>
-        <li><a href="#why-some-options-are-greyed-out">Why some options are greyed out</a></li>
+        <li><a href="#each-mode-offers-only-the-templates-it-can-run">Each mode offers only the templates it can run</a></li>
       </ul>
     </details>
   </li>
@@ -68,12 +68,14 @@ evidence = "fulltext"
 
 Evidence is strict: `abstract` templates receive only metadata plus the abstract
 and reject papers without one; `fulltext` templates require a readable local PDF
-and process every page from which `pypdf` can extract text. The selector shows
-all choices and disables incompatible ones with a reason.
+and process every page from which `pypdf` can extract text. **Evidence also
+decides which mode a template belongs to** — see
+[below](#each-mode-offers-only-the-templates-it-can-run).
 
 Use `--template ID` for a global choice. With `--select`, each paper can still
-use a different template and the global choice becomes the initial selection.
-Run `uv run papertracker --list-templates` to inspect the active catalog.
+use a different template of that mode's evidence type, and the global choice
+becomes the initial selection. Run `uv run papertracker --list-templates` to
+inspect the whole catalog, both evidence types together.
 
 Template IDs are case-sensitive filename stems, shown alphabetically. Configure
 the defaults with:
@@ -105,44 +107,54 @@ submit.
 -->
 
 Each row carries a color-coded relevance score, the paper's title and venue, and
-its own template dropdown, so a single run can screen some papers on the
-abstract and send others through a deep template.
+its own template dropdown, so one run can send different papers through
+different formats — a quick screen for most, a fuller one for the two that look
+important.
 
-### Why some options are greyed out
+### Each mode offers only the templates it can run
 
-A discovery paper arrives as metadata plus an abstract, so a `fulltext` template
-has nothing to read and the dropdown disables it:
+The dropdown is filtered by evidence, so you only ever see choices that work on
+the papers in front of you:
+
+| Mode | Papers hold | Dropdown offers |
+|---|---|---|
+| `--select` on a discovery run | title, abstract, metadata | every `abstract` template |
+| `--related-work --select` | the same | every `abstract` template |
+| `--zotero-collection --select` | a saved local PDF | every `fulltext` template |
+
+That is the whole rule. A discovery paper has no PDF, so a deep template cannot
+run on it and is not offered rather than shown greyed out — a dropdown that is
+mostly dead reads as a broken control, not as a mode boundary.
+
+`--template` follows the same rule and fails fast when it disagrees with the
+mode:
 
 ```text
-Deep — Technical and Benchmark [needs PDF — not in your Zotero library]
+ERROR Template 'deep-technical' needs fulltext evidence, but this run
+      supplies abstract. Full-text templates read a saved PDF — use
+      --zotero-collection to run them over a collection.
 ```
 
-Before rendering the page, PaperTracker checks your Zotero library for each
-paper — by DOI first, then by normalized title. Anything already in your library
-gets its local PDF attached, and its `fulltext` options become selectable:
+Within a mode an option can still be disabled, but now only for a paper that is
+missing what its peers have — a PDF that will not open, or a record that arrived
+without an abstract. When that happens the card pre-selects a template it *can*
+run instead of the configured default.
 
-```text
-INFO Zotero: 4 of 23 paper(s) have a local PDF — full-text templates
-     are selectable for those
-```
-
-So the practical route to a deep summary of a paper from today's digest is: save
-it to Zotero, let the PDF download, and rerun `--select`. The lookup is
-read-only, costs one database read per run, and is skipped entirely when no
-`fulltext` template is on offer. No Zotero library simply means the deep
-templates stay disabled, which is the honest state — there is no PDF to read.
-
-To summarize a whole collection at once instead, use
-[Zotero PDF batch mode](zotero.md).
+**So the route from a digest paper to a deep summary is:** screen it on the
+abstract today, save the PDF to Zotero, and run
+[Zotero PDF batch mode](zotero.md) over that collection when you sit down to
+read. The two steps stay separate on purpose — one is triage, the other is
+reading.
 
 ## Selecting without a browser
 
 When stdin is **not** a TTY — a cron job, piped input — it goes straight to a
-numbered text prompt instead. In that prompt, a bare paper number uses the
-default template; add `:template-id` to choose another, e.g.
-`1,2:deep-human-study`. `a` selects all papers with the default template. The
-same evidence rules apply: asking for a `fulltext` template on a paper with no
-PDF is rejected with the reason rather than silently downgraded.
+numbered text prompt instead. It lists the same templates the browser page would
+have offered, filtered to the mode's evidence. A bare paper number uses the
+default; add `:template-id` to choose another, e.g. `1,2:abstract-screen` on a
+discovery run or `1,2:deep-human-study` on a Zotero run. `a` selects all papers
+with the default template. Naming a template from the other mode is rejected
+with the reason rather than silently downgraded.
 
 **Over SSH**, stdin usually *is* a TTY, so PaperTracker still tries the browser
 path. If it cannot open one it does not error — it prints the URL and waits.

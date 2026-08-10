@@ -25,7 +25,8 @@ Common symptoms and their fixes, plus the platform-specific notes for Windows.
 | `Source journal_rss failed: every RSS feed failed` | Every configured feed was unreachable. If they are all ACM, that is expected — remove `rss` from ACM venues, which [cannot be fetched from a script](discovery.md#customizing-venues-and-sources). Otherwise check your connection. |
 | `RSS feed fetch failed for <venue> — keeping the N feed(s) that answered` | A warning, not an error. That publisher blocked or timed out; the other feeds were kept and the venue still arrives via Crossref. |
 | `RSS[<venue>]: all N entries carry no DOI` | The feed loaded but identifies papers by publisher URL, so nothing could be matched against Crossref. Known for IEEE Xplore — [details](discovery.md#customizing-venues-and-sources). Drop the `rss` line; the venue still arrives via Crossref. |
-| `--select` dropdown greys out every deep template | Those need a readable PDF and a discovery paper has only an abstract. Save the paper to Zotero, let the PDF download, and rerun — PaperTracker matches by DOI then title and unlocks them. [Details](templates.md#why-some-options-are-greyed-out). |
+| `--select` dropdown does not list the deep templates | By design — a discovery paper has no PDF to read. Save it to Zotero, then run `--zotero-collection` over that collection. [Details](templates.md#each-mode-offers-only-the-templates-it-can-run). |
+| `Template 'X' needs fulltext evidence, but this run supplies abstract` | `--template` named a deep template on a discovery run. Use `--zotero-collection` for full-text summaries, or name an `abstract` template here. |
 | Re-summarize a paper you already saw | `--ignore-seen`, or delete `user_data/state/<project-id>/seen.json`. |
 | Inspect matches without spending quota | `--no-summarize`, which sorts by relevance score. |
 | Windows: `uv` not recognized | Reopen the terminal after installing, so `PATH` is re-read. |

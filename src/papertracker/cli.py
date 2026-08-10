@@ -373,7 +373,16 @@ def _summary_template_options(
     evidence: str = "abstract",
     args: argparse.Namespace | None = None,
 ) -> tuple[tuple[summary_templates.SummaryTemplate, ...], str]:
+    """Return the templates this mode may offer, plus its initial selection.
+
+    Filtered to a single evidence type on purpose. A discovery or related-work
+    run holds an abstract and nothing else; the Zotero batch holds a PDF. The
+    catalog used to be handed over whole and the options the mode could not
+    satisfy were disabled per paper, which meant a picker three-quarters greyed
+    out — that reads as a broken control, not as a mode boundary.
+    """
     templates, default = config.summary_template_catalog(evidence)
+    offered = tuple(t for t in templates if t.evidence == evidence)
     override = None
     if args is not None:
         override = (
@@ -381,38 +390,7 @@ def _summary_template_options(
             or getattr(args, "template", None)
             or getattr(args, "zotero_template", None)
         )
-    return templates, override or default.id
-
-
-def _unlock_fulltext_templates(
-    papers: list[dict],
-    templates: tuple[summary_templates.SummaryTemplate, ...],
-) -> None:
-    """Point papers already in Zotero at their local PDF before the picker renders.
-
-    The picker disables any template asking for evidence a paper cannot supply.
-    Discovery papers carry an abstract and no ``pdf_path``, so without this every
-    ``fulltext`` template is greyed out — including for a paper sitting in the
-    user's own library with its PDF attached, which is the one case where the
-    deep templates are exactly what you want.
-
-    Best-effort by design: no Zotero, an unreadable database, or no match all
-    leave the papers untouched and the templates disabled, which is the state
-    the picker already renders correctly.
-    """
-    if not any(getattr(t, "evidence", "") == "fulltext" for t in templates):
-        return
-    try:
-        found = zotero.annotate_pdf_paths(papers)
-    except Exception as exc:  # a picker must not die over an optional lookup
-        log.debug("Zotero PDF lookup skipped: %s", exc)
-        return
-    if found:
-        log.info(
-            "Zotero: %d of %d paper(s) have a local PDF — full-text templates "
-            "are selectable for those",
-            found, len(papers),
-        )
+    return offered, override or default.id
 
 
 def _resolve_template_override(args: argparse.Namespace) -> tuple[str | None, int]:
@@ -549,7 +527,6 @@ def _run_profile(
 
     if args.select:
         templates, default_template = _summary_template_options("abstract", args)
-        _unlock_fulltext_templates(new_papers, templates)
         to_summarize = selector.select_papers(
             new_papers, templates, default_template
         )
@@ -710,7 +687,6 @@ def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Nam
 
     if args.select:
         templates, default_template = _summary_template_options("abstract", args)
-        _unlock_fulltext_templates(ranked, templates)
         to_summarize = selector.select_papers(
             ranked, templates, default_template
         )
@@ -1143,7 +1119,26 @@ def main(argv: list[str] | None = None) -> int:
         try:
             config.summary_template_catalog()
             if template_override:
-                config.summary_template(template_override)
+                template = config.summary_template(template_override)
+                # Each mode offers one evidence type, so a mismatched --template
+                # is a mode mistake, not a per-paper one. Say so once here rather
+                # than letting _validate_template_evidence repeat itself for
+                # every paper in the run.
+                wanted = "fulltext" if args.zotero_collection else "abstract"
+                if template.evidence != wanted:
+                    hint = (
+                        "Full-text templates read a saved PDF — use "
+                        "--zotero-collection to run them over a collection."
+                        if template.evidence == "fulltext"
+                        else "Abstract templates are for discovery runs — drop "
+                        "--zotero-collection to use one."
+                    )
+                    log.error(
+                        "Template %r needs %s evidence, but this run supplies "
+                        "%s. %s",
+                        template_override, template.evidence, wanted, hint,
+                    )
+                    return 2
         except config.ConfigError as exc:
             log.error(str(exc))
             return 2

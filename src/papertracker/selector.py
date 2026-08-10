@@ -343,10 +343,15 @@ updateCount();
 
 
 def _blocker(template: summary_templates.SummaryTemplate) -> str:
-    """Short reason an option is disabled, sized to fit inside the control."""
+    """Short reason an option is disabled, sized to fit inside the control.
+
+    Each mode offers a single evidence type, so this is no longer the common
+    case — it is one paper in the batch missing what the rest of them have: a
+    PDF that will not open, or a record that arrived without an abstract.
+    """
     if template.evidence == "fulltext":
-        return "needs PDF — not in your Zotero library"
-    return "needs an abstract — none available"
+        return "PDF missing or unreadable"
+    return "no abstract available"
 
 
 def _card(
@@ -362,8 +367,19 @@ def _card(
     meta = html.escape(f"{author_str} · {_meta(paper)}")
     url = html.escape(paper.get("url") or "#", quote=True)
     abstract = html.escape((paper.get("abstract") or "").strip()) or "(no abstract)"
+    options = _template_objects(templates)
+    # Pre-select something this paper can actually run. Marking the configured
+    # default `selected disabled` still submits it, and the pick is only
+    # rejected after the form comes back — so the card would advertise a
+    # template that fails on submit. Falling back to the first compatible option
+    # keeps the card honest; if none qualify the browser selects nothing.
+    usable = [t for t in options if _compatibility(t, paper)[0]]
+    selected_id = default_template
+    if not any(t.id == default_template for t in usable):
+        selected_id = usable[0].id if usable else None
+
     template_options = ""
-    for template in _template_objects(templates):
+    for template in options:
         compatible, reason = _compatibility(template, paper)
         label = template.label or template.id
         description = template.description
@@ -380,7 +396,7 @@ def _card(
         option_title = description if compatible else f"{description} {reason}".strip()
         template_options += (
             f'<option value="{html.escape(template.id, quote=True)}"'
-            f'{" selected" if template.id == default_template else ""}'
+            f'{" selected" if template.id == selected_id else ""}'
             f'{" disabled" if not compatible else ""}'
             f' data-evidence="{html.escape(template.evidence, quote=True)}"'
             f' title="{html.escape(option_title, quote=True)}">'

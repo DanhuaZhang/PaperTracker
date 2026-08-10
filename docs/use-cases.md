@@ -55,9 +55,10 @@ rather than taking all of them:
 uv run papertracker --select --days 2
 ```
 
-That opens a browser tab on `127.0.0.1`. Tick the papers worth summarizing, and
-set a template per paper: a quick screen for most, a deeper format for the one
-or two that matter.
+That opens a browser tab on `127.0.0.1`. Tick the papers worth summarizing and
+set a template per paper. The dropdown lists the `abstract` templates — this is
+a triage pass over abstracts, so the full-text formats belong to
+[step 2](#2-deep-reading-a-shortlist) and are not offered here.
 
 <!-- SCREENSHOT SLOT: selector-daily.png — see docs/images/README.md
 <img src="images/selector-daily.png"
