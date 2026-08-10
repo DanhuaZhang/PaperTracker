@@ -32,7 +32,7 @@ split:
 | File | Holds | Tracked in git? |
 |---|---|---|
 | `config.toml` | Runtime defaults: provider, models, effort, sources, thresholds, output paths, Zotero, templates | Yes — keep it topic-neutral |
-| `summary_templates/*.md` | The summary formats, one file per dropdown option | Yes — edit in place |
+| `summary_templates/{abstract,fulltext}/*.md` | The summary formats, one file per dropdown option, foldered by the mode that offers it | Yes — edit in place |
 | `user_data/projects.toml` | Your topics, per-project overrides, and priority venues | No |
 | `~/.config/papertracker/config.toml` | Your provider, provider-specific model defaults, and reasoning effort | No — outside the checkout |
 
@@ -158,7 +158,16 @@ lower `--max-results` if you want it faster.
 
 Scores are cosine similarity between two normalized embeddings, so they land in
 roughly 0.4–0.9 in practice rather than spanning the full 0–1 range — which is
-why 0.65 is a sensible default cutoff and 0.2 would keep everything.
+why **0.7** is the default cutoff and 0.2 would keep everything.
+
+The two thresholds are deliberately different numbers because they grade
+different quantities. `relevance_threshold` (0.7) is compared against that raw
+cosine. `hybrid_relevance_threshold` (0.60) is compared against
+`0.60·dense_norm + 0.40·bm25_norm`, and the BM25 half is min-max normalized
+**within the batch** — so the best paper in any given run scores 1.0 on that
+component whether or not it is any good. A hybrid score is therefore relative to
+the run it came from, and 0.7 there would be far stricter than 0.7 on the dense
+scale, not equivalent to it.
 
 ### Tuning
 
@@ -167,8 +176,8 @@ In this order of impact:
 1. **Sharpen `topic_statement`** in `user_data/projects.toml`. Longer and more
    specific discriminates better than any threshold change.
 2. **Adjust the threshold** — `relevance_threshold` for `dense`,
-   `hybrid_relevance_threshold` for `hybrid` — or pass `--threshold 0.7` per run.
-   Higher is stricter.
+   `hybrid_relevance_threshold` for `hybrid` — or pass `--threshold 0.75` per
+   run to try one without editing anything. Higher is stricter.
 3. **Switch scorer** with `relevance_scorer` or `--scorer hybrid`.
 
 Inspect scores without spending any quota:

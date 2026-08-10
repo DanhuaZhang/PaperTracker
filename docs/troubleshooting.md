@@ -17,8 +17,8 @@ Common symptoms and their fixes, plus the platform-specific notes for Windows.
 |---|---|
 | `'claude' not found on PATH` | Install Claude Code (<https://claude.com/code>), then `claude auth login`. |
 | `'codex' not found on PATH` | Follow the [Codex CLI install guide](https://learn.chatgpt.com/docs/codex/cli), then `codex login`. |
-| Empty digest every day | Lower `--threshold` (try 0.55) or broaden `topic_statement`; try `--days 7`. |
-| Too much noise | Raise `--threshold` (try 0.7) or sharpen `topic_statement`. |
+| Empty digest every day | Lower `--threshold` (try 0.6) or broaden `topic_statement`; try `--days 7`. The default is 0.7. |
+| Too much noise | Raise `--threshold` (try 0.75) or sharpen `topic_statement`. |
 | `--list-projects` shows nothing | You haven't created `user_data/projects.toml` — see [Setup step 4](setup.md#4-create-your-topics-file). |
 | First run is slow | It's downloading the ~65 MB embedding model into `user_data/cache/fastembed/`. `uv sync` does not fetch it. Cached afterwards. |
 | Log says `capped at 1500 of N total` | Raise `max_results_per_query` in `config.toml` or pass `--max-results`. Scoring is local, so the cost here is HTTP traffic and time. |

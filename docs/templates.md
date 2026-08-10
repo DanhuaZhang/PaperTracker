@@ -28,11 +28,25 @@ Summary formats are user-owned Markdown skeletons discovered from
 
 ```text
 summary_templates/          # tracked in git; the only copy
-├── abstract-screen.md
-├── deep-human-study.md
-├── deep-synthesis.md
-└── deep-technical.md
+├── abstract/               # offered by --select on discovery and related-work runs
+│   └── abstract-screen.md
+└── fulltext/               # offered by --zotero-collection
+    ├── deep-human-study.md
+    ├── deep-synthesis.md
+    └── deep-technical.md
 ```
+
+**The folder is the mode.** A template's `evidence` metadata and the folder it
+sits in must agree, and discovery refuses to start if they do not:
+
+```text
+ERROR Summary template 'misfiled' at .../abstract/misfiled.md declares
+      evidence = 'fulltext' but sits in the 'abstract' folder. Move the file
+      or fix the metadata.
+```
+
+Both folders must exist. IDs are unique across the whole tree, so `--template
+deep-technical` never needs a path.
 
 **This is the only place templates live.** What is in this folder is exactly
 what the summarizer fills in and what the `--select` dropdown offers — there is
@@ -40,15 +54,15 @@ no packaged copy shadowing it and nothing seeds or re-seeds it, so deleting a
 file removes that option for good (`git checkout summary_templates/` brings it
 back).
 
-To make your own, **copy a sample to a new name** and edit that. A new file is
-untracked, so it never collides with a `git pull`. Editing one of the four
-shipped templates works too and simply shows up as a normal modification in
-`git status`.
+To make your own, **copy a sample to a new name** inside the folder for the
+mode you want it in. A new file is untracked, so it never collides with a
+`git pull`. Editing one of the four shipped templates works too and simply
+shows up as a normal modification in `git status`.
 
 ## Writing one
 
-Each direct-child `*.md` filename becomes a dropdown option for every paper.
-There is no template-count limit. Every file starts with metadata that is
+Each `*.md` filename inside an evidence folder becomes a dropdown option in
+that mode. There is no template-count limit. Every file starts with metadata that is
 removed before prompting:
 
 ```markdown
@@ -77,8 +91,8 @@ use a different template of that mode's evidence type, and the global choice
 becomes the initial selection. Run `uv run papertracker --list-templates` to
 inspect the whole catalog, both evidence types together.
 
-Template IDs are case-sensitive filename stems, shown alphabetically. Configure
-the defaults with:
+Template IDs are case-sensitive filename stems, listed abstract folder first
+and alphabetically within each. Configure the defaults with:
 
 ```toml
 summary_template_dir = "summary_templates"

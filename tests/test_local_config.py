@@ -73,12 +73,13 @@ codex_model = "gpt-project"
 def test_config_constants_load_from_project_config(tmp_path, monkeypatch):
     project_cfg = tmp_path / "src.toml"
     template_dir = tmp_path / "templates"
-    template_dir.mkdir()
-    (template_dir / "Screen.md").write_text(
+    (template_dir / "abstract").mkdir(parents=True)
+    (template_dir / "fulltext").mkdir(parents=True)
+    (template_dir / "abstract" / "Screen.md").write_text(
         '<!-- papertracker-template\nlabel="Screen"\ndescription="D"\nevidence="abstract"\n-->\n## Test',
         encoding="utf-8",
     )
-    (template_dir / "Deep.md").write_text(
+    (template_dir / "fulltext" / "Deep.md").write_text(
         '<!-- papertracker-template\nlabel="Deep"\ndescription="D"\nevidence="fulltext"\n-->\n## Test',
         encoding="utf-8",
     )
@@ -158,9 +159,10 @@ default_fulltext_template = "Deep"
         # so point that at the fixture too.
         m.setattr(loaded, "REPOSITORY_ROOT", tmp_path)
         templates, default = loaded.summary_template_catalog()
-        assert [template.id for template in templates] == ["Deep", "Screen"]
+        # Ordered by (evidence folder, filename), so abstract sorts before fulltext.
+        assert [template.id for template in templates] == ["Screen", "Deep"]
         assert default.id == "Screen"
-        assert default.path == template_dir / "Screen.md"
+        assert default.path == template_dir / "abstract" / "Screen.md"
         _, deep = loaded.summary_template_catalog("fulltext")
         assert deep.id == "Deep"
 

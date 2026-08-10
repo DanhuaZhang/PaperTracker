@@ -43,32 +43,56 @@ class SummaryTemplate:
 def discover(
     directory: Path, default_id: str | None = None
 ) -> tuple[tuple[SummaryTemplate, ...], SummaryTemplate | None]:
-    """Return validated direct-child templates in case-sensitive filename order."""
+    """Return validated templates from the per-evidence subfolders.
+
+    Layout is ``<directory>/<evidence>/<id>.md`` — one folder per evidence type,
+    matching the mode each template belongs to. The folder is not merely
+    cosmetic: a file whose ``evidence`` metadata disagrees with the folder it
+    sits in is rejected, so the two can never drift into disagreeing about which
+    picker a template shows up in.
+
+    Templates are returned in ``(evidence, filename)`` order, and IDs stay unique
+    across the whole tree so a bare ``--template ID`` is unambiguous.
+    """
     if not directory.exists():
         raise config.ConfigError(f"Summary template directory does not exist: {directory}")
     if not directory.is_dir():
         raise config.ConfigError(f"Summary template path is not a directory: {directory}")
 
-    try:
-        paths = sorted(
-            (
-                path for path in directory.iterdir()
-                if path.is_file() and path.suffix == ".md"
-            ),
-            key=lambda path: path.name,
-        )
-    except OSError as exc:
+    stray = _stray_top_level_templates(directory)
+    if stray:
         raise config.ConfigError(
-            f"Could not read summary template directory {directory}: {exc}"
-        ) from exc
-    if not paths:
-        raise config.ConfigError(
-            f"Summary template directory contains no .md templates: {directory}"
+            f"Summary templates must live in an evidence subfolder. Move "
+            f"{', '.join(p.name for p in stray)} into "
+            f"{directory / 'abstract'} or {directory / 'fulltext'}."
         )
+
+    paths: list[tuple[str, Path]] = []
+    for evidence in sorted(EVIDENCE_TYPES):
+        subdir = directory / evidence
+        if not subdir.is_dir():
+            raise config.ConfigError(
+                f"Missing summary template folder: {subdir}. Each evidence type "
+                "needs its own folder, even if empty of all but one template."
+            )
+        try:
+            found = sorted(
+                (p for p in subdir.iterdir() if p.is_file() and p.suffix == ".md"),
+                key=lambda p: p.name,
+            )
+        except OSError as exc:
+            raise config.ConfigError(
+                f"Could not read summary template directory {subdir}: {exc}"
+            ) from exc
+        if not found:
+            raise config.ConfigError(
+                f"Summary template folder contains no .md templates: {subdir}"
+            )
+        paths.extend((evidence, path) for path in found)
 
     templates: list[SummaryTemplate] = []
     seen_ids: dict[str, Path] = {}
-    for path in paths:
+    for folder_evidence, path in paths:
         template_id = path.stem
         if not TEMPLATE_ID_RE.fullmatch(template_id):
             raise config.ConfigError(
@@ -81,7 +105,14 @@ def discover(
                 f"{seen_ids[template_id]} and {path}"
             )
         seen_ids[template_id] = path
-        templates.append(_parse_template(template_id, path))
+        template = _parse_template(template_id, path)
+        if template.evidence != folder_evidence:
+            raise config.ConfigError(
+                f"Summary template {template_id!r} at {path} declares "
+                f"evidence = {template.evidence!r} but sits in the "
+                f"{folder_evidence!r} folder. Move the file or fix the metadata."
+            )
+        templates.append(template)
 
     by_id = {template.id: template for template in templates}
     default = None
@@ -93,6 +124,17 @@ def discover(
                 f"{directory}"
             )
     return tuple(templates), default
+
+
+def _stray_top_level_templates(directory: Path) -> list[Path]:
+    """Templates left in the old flat layout, so the error can name them."""
+    try:
+        return sorted(
+            (p for p in directory.iterdir() if p.is_file() and p.suffix == ".md"),
+            key=lambda p: p.name,
+        )
+    except OSError:
+        return []
 
 
 def _parse_template(template_id: str, path: Path) -> SummaryTemplate:

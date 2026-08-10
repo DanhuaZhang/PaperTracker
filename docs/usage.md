@@ -66,7 +66,7 @@ read it before installing.
 |---|---|---|
 | `--sources a,b` | `enabled_sources_default` | Restrict to `arxiv`, `ieee`, `acm`, `journal_rss` |
 | `--priority-venues-only` | `priority_venue_only` (false) | Drop papers matching no priority venue |
-| `--threshold F` | `relevance_threshold` (0.65) | Override the relevance cutoff. `-1` keeps everything |
+| `--threshold F` | `relevance_threshold` (0.7) | Override the relevance cutoff. `-1` keeps everything |
 | `--scorer dense\|hybrid` | `relevance_scorer` (`dense`) | Which local scorer to use |
 | `--ignore-seen` | off | Re-process papers already in `seen.json` |
 
@@ -106,7 +106,7 @@ reused* for papers that are processed.
 ## Where your data lives
 
 ```text
-summary_templates/*.md                # your summary formats (tracked in git)
+summary_templates/{abstract,fulltext}/*.md   # your summary formats (tracked)
 user_data/                            # gitignored in full
 ├── projects.toml                     # your topics
 ├── digests/<project-id>/YYYY-MM-DD.md

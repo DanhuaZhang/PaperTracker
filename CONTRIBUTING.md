@@ -46,8 +46,10 @@ alongside it or `uv sync --locked` fails in CI.
   Personal settings belong in `~/.config/papertracker/config.toml` or
   `PAPERTRACKER_*` environment variables — please don't commit changes to
   `config.toml` just to configure your own machine.
-- `summary_templates/*.md` is the single copy of the summary formats. There is
-  no packaged duplicate to keep in sync.
+- `summary_templates/abstract/` and `summary_templates/fulltext/` hold the
+  single copy of the summary formats, split by the mode that offers them. A
+  template's `evidence` metadata must match its folder. There is no packaged
+  duplicate to keep in sync.
 - Everything machine-local lives in `user_data/`, which is gitignored. Never
   commit digests, topics, or caches.
 

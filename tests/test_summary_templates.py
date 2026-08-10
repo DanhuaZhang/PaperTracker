@@ -24,21 +24,69 @@ def _write_template(
     )
 
 
-def test_discover_is_unlimited_direct_child_and_case_sensitive(tmp_path):
-    for name in ("z.md", "A.md", "b.md", "ignored.MD"):
-        if name.endswith(".md"):
-            _write_template(tmp_path / name, label=name)
-        else:
-            (tmp_path / name).write_text("ignored", encoding="utf-8")
-    nested = tmp_path / "nested"
-    nested.mkdir()
-    _write_template(nested / "nested.md")
+def _make_tree(tmp_path: Path) -> Path:
+    """Build the two-folder layout with one template in each, ready to extend."""
+    (tmp_path / "abstract").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "fulltext").mkdir(parents=True, exist_ok=True)
+    _write_template(tmp_path / "abstract" / "screen.md", evidence="abstract")
+    _write_template(tmp_path / "fulltext" / "deep.md", evidence="fulltext")
+    return tmp_path
+
+
+def test_discover_is_unlimited_per_folder_and_case_sensitive(tmp_path):
+    _make_tree(tmp_path)
+    for name in ("z.md", "A.md", "b.md"):
+        _write_template(tmp_path / "abstract" / name, label=name, evidence="abstract")
+    (tmp_path / "abstract" / "ignored.MD").write_text("ignored", encoding="utf-8")
+    deeper = tmp_path / "abstract" / "nested"
+    deeper.mkdir()
+    _write_template(deeper / "nested.md")
 
     templates, default = summary_templates.discover(tmp_path, "z")
 
-    assert [item.id for item in templates] == ["A", "b", "z"]
+    # Abstract folder first, filenames case-sensitively sorted inside it.
+    assert [item.id for item in templates] == ["A", "b", "screen", "z", "deep"]
     assert default.id == "z"
     assert templates[0].body == "## Finding"
+
+
+def test_discover_rejects_a_template_in_the_wrong_evidence_folder(tmp_path):
+    _make_tree(tmp_path)
+    _write_template(tmp_path / "abstract" / "misfiled.md", evidence="fulltext")
+
+    with pytest.raises(config.ConfigError, match="sits in the 'abstract' folder") as exc:
+        summary_templates.discover(tmp_path)
+
+    assert "misfiled" in str(exc.value)
+
+
+def test_discover_points_the_old_flat_layout_at_the_new_folders(tmp_path):
+    _make_tree(tmp_path)
+    _write_template(tmp_path / "leftover.md")
+
+    with pytest.raises(config.ConfigError, match="must live in an evidence subfolder") as exc:
+        summary_templates.discover(tmp_path)
+
+    assert "leftover.md" in str(exc.value)
+
+
+def test_discover_names_a_missing_evidence_folder(tmp_path):
+    (tmp_path / "abstract").mkdir()
+    _write_template(tmp_path / "abstract" / "screen.md", evidence="abstract")
+
+    with pytest.raises(config.ConfigError, match="Missing summary template folder") as exc:
+        summary_templates.discover(tmp_path)
+
+    assert str(tmp_path / "fulltext") in str(exc.value)
+
+
+def test_discover_rejects_a_duplicate_id_across_folders(tmp_path):
+    """IDs stay unique tree-wide so a bare --template ID is unambiguous."""
+    _make_tree(tmp_path)
+    _write_template(tmp_path / "fulltext" / "screen.md", evidence="fulltext")
+
+    with pytest.raises(config.ConfigError, match="Duplicate summary template ID"):
+        summary_templates.discover(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -56,7 +104,8 @@ def test_discover_is_unlimited_direct_child_and_case_sensitive(tmp_path):
 def test_discover_reports_validation_failures_with_paths(
     tmp_path, filename, content, message
 ):
-    path = tmp_path / filename
+    _make_tree(tmp_path)
+    path = tmp_path / "abstract" / filename
     path.write_text(content, encoding="utf-8")
     with pytest.raises(config.ConfigError, match=message) as exc:
         summary_templates.discover(tmp_path)
@@ -64,17 +113,14 @@ def test_discover_reports_validation_failures_with_paths(
 
 
 def test_discover_reports_unreadable_utf8_with_path(tmp_path):
-    path = tmp_path / "bad.md"
-    path.write_bytes(b"\xff")
+    _make_tree(tmp_path)
+    (tmp_path / "abstract" / "bad.md").write_bytes(b"\xff")
     with pytest.raises(config.ConfigError, match=r"bad\.md"):
         summary_templates.discover(tmp_path)
 
 
 def test_config_uses_repository_root_and_evidence_specific_defaults(monkeypatch, tmp_path):
-    active = tmp_path / "templates"
-    active.mkdir()
-    _write_template(active / "screen.md", evidence="abstract")
-    _write_template(active / "deep.md", evidence="fulltext")
+    active = _make_tree(tmp_path / "templates")
     # A relative template dir resolves against the repository root, not user_data.
     monkeypatch.setattr(config, "REPOSITORY_ROOT", tmp_path)
     monkeypatch.setattr(config, "SUMMARY_TEMPLATE_DIR", "templates")
@@ -84,10 +130,10 @@ def test_config_uses_repository_root_and_evidence_specific_defaults(monkeypatch,
     templates, abstract_default = config.summary_template_catalog("abstract")
     _, fulltext_default = config.summary_template_catalog("fulltext")
 
-    assert [item.id for item in templates] == ["deep", "screen"]
+    assert [item.id for item in templates] == ["screen", "deep"]
     assert abstract_default.id == "screen"
     assert fulltext_default.id == "deep"
-    assert abstract_default.path == active / "screen.md"
+    assert abstract_default.path == active / "abstract" / "screen.md"
 
 
 def test_every_shipped_template_parses_with_required_headings():

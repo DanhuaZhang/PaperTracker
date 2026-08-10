@@ -51,7 +51,7 @@ arxiv_categories = ["cs.AI", "cs.LG"]
 # `relevance_threshold`: papers scoring at/above this (0..1) pass to the
 # summarizer. Higher = stricter. Omit to inherit config.toml.
 # Tune it with: uv run papertracker --no-summarize --threshold -1 --days 14
-relevance_threshold = 0.65
+relevance_threshold = 0.7
 
 # Optional: facets group related-work candidates when you run
 # `--related-work --facets`. Remove this block if you don't use faceted mode.

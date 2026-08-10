@@ -128,7 +128,7 @@ uv run papertracker --select --days 2   # pick papers and templates in a browser
 
 ```text
 config.toml                 # runtime defaults (tracked; keep topic-neutral)
-summary_templates/*.md      # your summary formats (tracked; the only copy)
+summary_templates/          # your summary formats, abstract/ and fulltext/
 docs/                       # the manual
 user_data/                  # gitignored in full: topics, digests, state, caches
 ```
@@ -152,9 +152,8 @@ uv build                            # the wheel/sdist build must succeed
 ```
 
 `.github/workflows/ci.yml` runs those plus `uv sync --locked` on Ubuntu, macOS,
-and Windows. Tests are
-offline and stub every HTTP call — nothing in the suite touches arXiv, Crossref,
-HuggingFace, or an AI CLI.
+and Windows. Tests are offline and stub every HTTP call — nothing in the suite
+touches arXiv, Crossref, HuggingFace, or an AI CLI.
 
 See [CONTRIBUTING](CONTRIBUTING.md) before sending a change.
 
