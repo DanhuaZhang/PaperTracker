@@ -129,8 +129,11 @@ user_data/                            # gitignored in full
 └── cache/fastembed/                  # the local embedding model
 ```
 
-Digests are grouped by `## ★ Priority venues`, then `## arXiv preprints`, then
-`## Other ACM / IEEE`.
+A digest is grouped into sections: **one `## ★ <venue>` heading per priority
+venue that matched**, in the order the venues are configured, then
+`## arXiv preprints`, then `## Other ACM / IEEE`. A venue with no papers that day
+gets no heading, and anything that is neither arXiv nor a priority-venue match —
+including `journal_rss` hits — lands in `Other ACM / IEEE`.
 
 Running the same project more than once in a day merges newly summarized papers
 into that day's digest. An empty later run leaves the existing digest untouched.

@@ -19,8 +19,10 @@ search at your own venues.
 
 PaperTracker **never logs into IEEE Xplore or ACM Digital Library**. Both
 publishers are Crossref members and deposit metadata — DOI, title, abstract when
-available, authors, date — on publication day. We query Crossref filtered by
-member ID (`320` = ACM, `263` = IEEE) within a date window. Free, no auth.
+available, authors, date — within roughly 1–14 days of publication. We query
+Crossref filtered by member ID (`320` = ACM, `263` = IEEE) within a date window.
+Free, no auth. That deposit lag is the one real gap in discovery, and
+[Timing](#timing) explains how to work around it.
 
 | Step | Endpoint | Auth | Returns |
 |---|---|---|---|
@@ -32,8 +34,9 @@ member ID (`320` = ACM, `263` = IEEE) within a date window. Free, no auth.
 
 The **IEEE Xplore and ACM Digital Library APIs are not used at all** — neither
 directly nor behind a key you would have to obtain. Papers from both publishers
-arrive via Crossref member IDs and, optionally, the publishers' public RSS
-feeds.
+arrive via Crossref member IDs. PaperTracker can also poll a journal RSS feed,
+but neither publisher's feed works today —
+[why](#customizing-venues-and-sources).
 
 ## Sources, limits, and reuse terms
 

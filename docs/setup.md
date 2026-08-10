@@ -108,8 +108,11 @@ will run PaperTracker from. On Windows an npm-installed CLI lands as a `.cmd`
 shim; PaperTracker resolves it to its full path before spawning it, so the shim
 works without `shell=True`.
 
-Do not edit the tracked `config.toml` just to choose a provider. Set a personal
-default in your shell instead:
+PaperTracker ships configured for `claude`. The provider is an ordinary
+`config.toml` setting, so `provider = "codex"` there is a perfectly good answer —
+just note that `config.toml` is tracked, so the change will sit in `git status`
+until you commit or revert it. To switch providers without touching the
+checkout, export the variable instead:
 
 ```bash
 export PAPERTRACKER_PROVIDER=codex           # macOS / Linux

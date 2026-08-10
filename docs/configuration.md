@@ -165,11 +165,12 @@ Two local, non-LLM scorers:
 The model runs on the **CPU**. PaperTracker passes no ONNX execution provider,
 so `fastembed` uses `CPUExecutionProvider` — there is no GPU, CUDA, or Apple
 Neural Engine path, on any platform. Measured on Apple Silicon, it scores
-roughly 100 abstracts every 8 seconds — so a full default fetch (up to 1500
-papers per source) spends about two minutes scoring, on **every** run, not just
-the first.
-That is the bulk of a typical run's wall clock. Narrow `arxiv_categories` or
-lower `--max-results` if you want it faster.
+roughly 100 abstracts every 8 seconds — so 1500 papers is about two minutes of
+scoring, and `max_results_per_query` caps at 1500 **per source**, so a wide run
+across arXiv, ACM, and IEEE can take several times that. It happens on **every**
+run, not just the first, and it is the bulk of a typical run's wall clock.
+Narrow `arxiv_categories`, drop a source, or lower `--max-results` if you want
+it faster.
 
 Scores are cosine similarity between two normalized embeddings, so they land in
 roughly 0.4–0.9 in practice rather than spanning the full 0–1 range — which is

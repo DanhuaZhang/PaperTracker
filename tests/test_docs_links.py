@@ -57,9 +57,9 @@ def _tracked() -> tuple[frozenset[str], frozenset[str]]:
 def _visible(text: str) -> str:
     """Strip what a reader never clicks: code blocks and HTML comments.
 
-    Commented-out blocks matter here — screenshot slots ship as comments
-    holding a ready-to-paste <img> for an image that does not exist yet, and
-    those must not count as broken references.
+    A fenced block may show a sample link or path that does not resolve, and a
+    commented-out block is by definition not rendered. Neither is a broken
+    reference, so neither should fail this file.
     """
     parts = FENCE.split(text)
     # Alternating: outside, inside, outside... keep only the even indices.

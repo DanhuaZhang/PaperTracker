@@ -38,15 +38,16 @@ can judge the cutoff at a glance:
   0.694  Message Passing Networks with Equivariant Attention
         arxiv · — · 2026-08-08 · https://arxiv.org/abs/...
 
-  0.601  A Survey of Graph Pooling Operators  ACM Transactions on Computer-Human Interaction
-        acm · ACM Transactions on Computer-Human Interaction · 2026-08-07 · https://doi.org/...
+  0.601  Gaze-Contingent Rendering for Untethered Headsets  ACM Transactions on Graphics
+        acm · ACM Transactions on Graphics · 2026-08-07 · https://doi.org/...
 ```
 
 Reading a row: the second line starts with the **source** that found it —
 `arxiv`, `acm`, `ieee`, or `journal_rss` — followed by the venue the publisher
-deposited. A `★` after the title means the paper matched one of your
-`priority_venues`, and shows your short name for it. arXiv preprints carry no
-venue at all, so they show `—`.
+deposited, then the date and link. The text after the title is `★ <your short
+name>` when the paper matched one of your `priority_venues`, and the deposited
+container title otherwise, which is why the third row repeats it. arXiv
+preprints carry no venue at all, so they get no suffix and show `—`.
 
 If the top of that list looks right, summarize — and pick papers individually
 rather than taking all of them:

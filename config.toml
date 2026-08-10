@@ -69,7 +69,9 @@ summary_timeout_sec = 180
 zotero_data_dir = "~/Zotero"
 zotero_linked_base = ""
 
-# User-owned Markdown summary skeletons. Relative paths resolve under user_data/.
+# User-owned Markdown summary skeletons. Unlike the output paths above, a
+# relative path here resolves against the repository root, because the templates
+# are tracked in git. Give an absolute path to keep them elsewhere.
 summary_template_dir = "summary_templates"
 default_abstract_template = "abstract-screen"
 default_fulltext_template = "deep-technical"
@@ -88,5 +90,9 @@ default_fulltext_template = "deep-technical"
 #   name = "IEEE TVCG"
 #   publisher = "ieee"
 #   patterns = ["Transactions on Visualization and Computer Graphics"]
-#   rss = "https://ieeexplore.ieee.org/rss/TOC2945.XML"   # optional
+#
+# An optional `rss = "..."` polls a feed directly. Do not add one for an ACM or
+# IEEE venue: ACM's feeds answer every script with a Cloudflare 403, and IEEE's
+# carry no DOI so every entry is dropped. Both arrive via CrossRef regardless.
+# See docs/discovery.md#customizing-venues-and-sources.
 priority_venues = []
