@@ -8,16 +8,36 @@ def _reset_projects(monkeypatch, path):
     monkeypatch.setattr(config, "_PROJECTS_CONFIG", None)
 
 
-def test_missing_projects_file_uses_legacy_profile(tmp_path, monkeypatch):
+def test_missing_projects_file_is_an_error_naming_the_fix(tmp_path, monkeypatch):
     _reset_projects(monkeypatch, tmp_path / "missing.toml")
 
     assert config.project_profiles() == []
-    profile = config.resolve_project()
+    with pytest.raises(config.ConfigError, match="No topics file at") as exc:
+        config.resolve_project()
 
-    assert profile.id is None
-    assert profile.topic_statement == config.TOPIC_STATEMENT
-    assert profile.digest_dir == config._user_path(config.DIGEST_DIR)
-    assert profile.seen_papers_file == config._user_path(config.SEEN_PAPERS_FILE)
+    # The message has to carry the fix; there is no fallback profile to soften it.
+    assert "projects.example.toml" in str(exc.value)
+    assert "topic_statement" in str(exc.value)
+
+
+def test_projects_file_without_any_profile_is_an_error(tmp_path, monkeypatch):
+    projects = tmp_path / "projects.toml"
+    projects.write_text('default_project = "none"\n', encoding="utf-8")
+    _reset_projects(monkeypatch, projects)
+
+    with pytest.raises(config.ConfigError, match="defines no \\[\\[projects\\]\\]"):
+        config.require_projects()
+
+
+def test_missing_projects_file_stops_before_any_source_is_fetched(tmp_path, monkeypatch):
+    _reset_projects(monkeypatch, tmp_path / "missing.toml")
+
+    def _explode(*args, **kwargs):
+        raise AssertionError("fetched a source despite having no topic to score against")
+
+    monkeypatch.setattr(cli, "SOURCE_FETCHERS", dict.fromkeys(cli.SOURCE_FETCHERS, _explode))
+
+    assert cli.main(["--no-summarize", "--days", "7"]) == 2
 
 
 def test_project_profile_inherits_defaults_and_uses_project_state(tmp_path, monkeypatch):
@@ -57,6 +77,8 @@ def test_project_profile_parses_contribution_and_related_work_facets(tmp_path, m
     projects = tmp_path / "projects.toml"
     projects.write_text(
         """
+arxiv_categories = ["cs.AI"]
+
 [[projects]]
 id = "faceted"
 name = "Faceted Project"
@@ -92,6 +114,9 @@ def test_project_profile_rejects_duplicate_ids(tmp_path, monkeypatch):
     projects = tmp_path / "projects.toml"
     projects.write_text(
         """
+topic_statement = "shared topic"
+arxiv_categories = ["cs.AI"]
+
 [[projects]]
 id = "same"
 name = "One"
@@ -110,11 +135,55 @@ name = "Two"
 
 def test_resolve_project_rejects_unknown_id(tmp_path, monkeypatch):
     projects = tmp_path / "projects.toml"
-    projects.write_text('[[projects]]\nid = "known"\nname = "Known"\n', encoding="utf-8")
+    projects.write_text(
+        'topic_statement = "t"\narxiv_categories = ["cs.AI"]\n'
+        '[[projects]]\nid = "known"\nname = "Known"\n',
+        encoding="utf-8",
+    )
     _reset_projects(monkeypatch, projects)
 
     with pytest.raises(config.ConfigError, match="Unknown project"):
         config.resolve_project("missing")
+
+
+def test_profile_without_topic_statement_is_an_error(tmp_path, monkeypatch):
+    projects = tmp_path / "projects.toml"
+    projects.write_text(
+        'arxiv_categories = ["cs.AI"]\n[[projects]]\nid = "bare"\nname = "Bare"\n',
+        encoding="utf-8",
+    )
+    _reset_projects(monkeypatch, projects)
+
+    # config.toml is topic-neutral, so there is no repository default to inherit.
+    with pytest.raises(config.ConfigError, match="sets no 'topic_statement'"):
+        config.project_profiles()
+
+
+def test_top_level_topic_statement_covers_every_profile(tmp_path, monkeypatch):
+    projects = tmp_path / "projects.toml"
+    projects.write_text(
+        """
+topic_statement = "shared across both profiles"
+arxiv_categories = ["cs.HC"]
+
+[[projects]]
+id = "one"
+name = "One"
+
+[[projects]]
+id = "two"
+name = "Two"
+topic_statement = "its own"
+""".strip(),
+        encoding="utf-8",
+    )
+    _reset_projects(monkeypatch, projects)
+
+    one, two = config.project_profiles()
+
+    assert one.topic_statement == "shared across both profiles"
+    assert one.arxiv_categories == ["cs.HC"]
+    assert two.topic_statement == "its own"
 
 
 def test_list_projects_prints_profiles(tmp_path, monkeypatch, capsys):
@@ -122,6 +191,8 @@ def test_list_projects_prints_profiles(tmp_path, monkeypatch, capsys):
     projects.write_text(
         """
 default_project = "known"
+topic_statement = "shared topic"
+arxiv_categories = ["cs.AI"]
 
 [[projects]]
 id = "known"

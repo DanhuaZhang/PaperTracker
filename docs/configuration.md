@@ -34,9 +34,11 @@ Repository defaults and topic profiles have a clear split:
 | `summary_templates/{abstract,fulltext}/*.md` | The summary formats, one file per dropdown option, foldered by the mode that offers it | Yes — edit in place |
 | `user_data/projects.toml` | Your topics, per-project overrides, and priority venues | No |
 
-Any field a project profile omits falls back to `config.toml`. Without a
-`user_data/projects.toml`, PaperTracker runs a single placeholder profile built
-entirely from `config.toml`.
+Any field a project profile omits falls back to `config.toml`. The file itself
+is required, though: without `user_data/projects.toml` every command exits 2
+with an error naming the fix, before any source is contacted. There is no
+fallback profile, because running one meant scoring a full window against
+`config.toml`'s placeholder text and reporting the result as an empty digest.
 
 **There is no per-user config file.** An earlier version read
 `~/.config/papertracker/config.toml`; it no longer does, and a leftover copy is
@@ -58,8 +60,15 @@ them do.** `embedding_model`, `enable_reranker`, `reranker_model`,
 `reranker_top_k`, `summary_timeout_sec`, `user_agent_name`, the two
 `default_*_template` keys, and the output paths (`digest_dir`,
 `seen_papers_file`, `summary_cache_file`) are read straight from `config.toml`;
-some of them, plus the thresholds and `arxiv_categories`, can additionally be set
-per project in `user_data/projects.toml`. To change any of those, edit the file.
+some of them, plus the thresholds, can additionally be set per project in
+`user_data/projects.toml`. To change any of those, edit the file.
+
+Three keys go the other way and live **only** in `user_data/projects.toml`:
+`topic_statement`, `arxiv_categories`, and `crossref_query_hint`. They describe
+someone's research rather than how the tool runs, so the tracked file carries no
+default for them — set each in a profile, or once at the top level of
+`projects.toml` to cover every profile. A profile missing `topic_statement` or
+`arxiv_categories` is a startup error naming the profile and the file.
 
 ## PaperTracker runs from a checkout
 

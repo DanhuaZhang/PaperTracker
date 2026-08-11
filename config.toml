@@ -32,17 +32,12 @@ enable_reranker = false
 reranker_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 reranker_top_k = 100
 
-# Placeholder topic, used only when no user_data/projects.toml exists.
-# Replace it there, not here.
-topic_statement = """
-Describe your research topic here, in a few sentences. The longer and more
-specific this is, the better PaperTracker can tell relevant papers from noise.
-Set this per project in user_data/projects.toml.
-"""
-crossref_query_hint = "replace with keywords describing your topic"
+# `topic_statement`, `crossref_query_hint`, and `arxiv_categories` are deliberately
+# absent: they describe somebody's research, and this file is tracked and shared.
+# They belong to a profile in user_data/projects.toml, or once at that file's top
+# level to cover every profile. A profile missing one is an error, not a default.
 
 # Paper sources.
-arxiv_categories = ["cs.AI"]
 enabled_sources_default = ["arxiv", "ieee", "acm", "journal_rss"]
 priority_venue_only = false
 

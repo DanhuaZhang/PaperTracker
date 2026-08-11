@@ -25,7 +25,12 @@ _ENDPOINT = "https://export.arxiv.org/api/query"
 
 
 def _build_query(start: dt.date, end: dt.date, categories: list[str] | None = None) -> str:
-    cat_query = "+OR+".join(f"cat:{c}" for c in (categories or config.ARXIV_CATEGORIES))
+    if not categories:
+        raise config.ConfigError(
+            "This project sets no arxiv_categories, so there is nothing to query. Add them "
+            "to the profile in projects.toml, or drop 'arxiv' from --sources."
+        )
+    cat_query = "+OR+".join(f"cat:{c}" for c in categories)
     date_range = (
         f"submittedDate:[{start.strftime('%Y%m%d')}000000+TO+{end.strftime('%Y%m%d')}235959]"
     )

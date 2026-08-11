@@ -91,15 +91,15 @@ def _topic_vector(topic_statement: str) -> np.ndarray:
     return vecs[0]
 
 
-def score_batch(texts: list[str], topic_statement: str | None = None) -> list[float]:
-    """Return cosine similarity to the active topic statement for each text.
+def score_batch(texts: list[str], topic_statement: str) -> list[float]:
+    """Return cosine similarity to the given topic statement for each text.
 
     BGE models output L2-normalized vectors, so dot product == cosine similarity.
     """
     if not texts:
         return []
     vecs = list(_model().embed(texts))
-    t = _topic_vector(topic_statement or config.TOPIC_STATEMENT)
+    t = _topic_vector(topic_statement)
     return [float(np.dot(v, t)) for v in vecs]
 
 
@@ -202,7 +202,7 @@ def score_texts(
 def filter_papers(
     papers: list[dict],
     threshold: float,
-    topic_statement: str | None = None,
+    topic_statement: str,
     scorer: str = "dense",
     enable_reranker: bool = False,
     reranker_model: str | None = None,
@@ -213,7 +213,7 @@ def filter_papers(
         return []
     texts = [f"{p.get('title', '')}. {p.get('abstract', '')}".strip() for p in papers]
     scores = score_texts(
-        topic_statement or config.TOPIC_STATEMENT,
+        topic_statement,
         texts,
         mode=scorer,
         enable_reranker=enable_reranker,

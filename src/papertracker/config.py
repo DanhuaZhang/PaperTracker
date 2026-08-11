@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import tomllib
@@ -11,28 +10,8 @@ from pathlib import Path
 
 from . import related_work
 
-log = logging.getLogger(__name__)
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-_LEGACY_REPOSITORY_CONFIG_PATH = REPOSITORY_ROOT / "papertracker.toml"
-
-
-def _repository_config_path() -> Path:
-    """Prefer config.toml; tolerate the pre-rename papertracker.toml."""
-    preferred = REPOSITORY_ROOT / "config.toml"
-    if preferred.is_file():
-        return preferred
-    if _LEGACY_REPOSITORY_CONFIG_PATH.is_file():
-        log.warning(
-            "Reading runtime defaults from %s. Rename it to %s — papertracker.toml is deprecated.",
-            _LEGACY_REPOSITORY_CONFIG_PATH,
-            preferred,
-        )
-        return _LEGACY_REPOSITORY_CONFIG_PATH
-    return preferred
-
-
-_REPOSITORY_CONFIG_PATH = _repository_config_path()
+_REPOSITORY_CONFIG_PATH = REPOSITORY_ROOT / "config.toml"
 
 
 class ConfigError(RuntimeError):
@@ -49,27 +28,9 @@ USER_DATA_DIR = Path(
 PROJECT_CONFIG_PATH = globals().get("PROJECT_CONFIG_PATH", _REPOSITORY_CONFIG_PATH)
 
 
-def _default_projects_config_path() -> Path:
-    """Prefer user_data/projects.toml; tolerate the pre-user_data repo-root location."""
-    preferred = USER_DATA_DIR / "projects.toml"
-    if preferred.is_file():
-        return preferred
-    legacy = REPOSITORY_ROOT / "projects.toml"
-    if legacy.is_file():
-        log.warning(
-            "Reading project profiles from %s. Move it to %s — the repo-root "
-            "location is deprecated.",
-            legacy,
-            preferred,
-        )
-        return legacy
-    return preferred
-
-
-PROJECTS_CONFIG_PATH = globals().get(
-    "PROJECTS_CONFIG_PATH",
-    _default_projects_config_path(),
-)
+# Topics live at exactly one path. A projects.toml anywhere else is not read,
+# and its absence is an error rather than a fallback — see require_projects().
+PROJECTS_CONFIG_PATH = globals().get("PROJECTS_CONFIG_PATH", USER_DATA_DIR / "projects.toml")
 
 
 def _user_path(relative: str | Path) -> str:
@@ -172,8 +133,10 @@ DOI_ENRICHMENT_SOURCES = _source_list(
 
 # Embedding-based relevance filter (replaces the old keyword filter).
 # Each paper's (title + abstract) is embedded with the model below and compared
-# to the TOPIC_STATEMENT vector via cosine similarity. Papers scoring at or above
-# RELEVANCE_THRESHOLD are kept.
+# to the active profile's topic_statement by cosine similarity. Papers scoring at
+# or above RELEVANCE_THRESHOLD are kept. What each project is *about* — the topic
+# statement, the query hint, the arXiv categories — lives in projects.toml only;
+# this tracked file holds tuning that is not specific to anyone's research.
 EMBEDDING_MODEL = _cfg("embedding_model")
 RELEVANCE_SCORER = _cfg("relevance_scorer")
 RELEVANCE_THRESHOLD = _cfg("relevance_threshold")
@@ -181,15 +144,6 @@ HYBRID_RELEVANCE_THRESHOLD = _cfg("hybrid_relevance_threshold")
 ENABLE_RERANKER = _cfg("enable_reranker")
 RERANKER_MODEL = _cfg("reranker_model")
 RERANKER_TOP_K = _cfg("reranker_top_k")
-
-TOPIC_STATEMENT = _cfg("topic_statement")
-
-# Loose keyword hint passed to CrossRef's `query` parameter to bias its ranking
-# (NOT a strict filter — that's done by the embedding model post-fetch).
-CROSSREF_QUERY_HINT = _cfg("crossref_query_hint")
-
-# arXiv categories to query (will be OR'd in the search_query)
-ARXIV_CATEGORIES = _cfg("arxiv_categories")
 
 # Priority venues — used for filtering and "★ priority" badge in the digest.
 # `patterns` are case-insensitive substrings matched against CrossRef container-title.
@@ -221,9 +175,9 @@ DEFAULT_SUMMARY_TEMPLATE = DEFAULT_ABSTRACT_TEMPLATE
 
 @dataclass(frozen=True)
 class ProjectProfile:
-    """Runnable topic profile loaded from ``projects.toml`` or legacy defaults."""
+    """Runnable topic profile loaded from ``projects.toml``."""
 
-    id: str | None
+    id: str
     name: str
     topic_statement: str
     crossref_query_hint: str
@@ -249,6 +203,22 @@ _PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 def _profile_value(raw: dict, key: str, default):
     return raw.get(key, default)
+
+
+def _required_profile_value(raw: dict, key: str, project_id: str):
+    """A field with no repository-wide default, because it describes the research.
+
+    config.toml is tracked and topic-neutral, so there is nothing sensible to
+    inherit. Look in the profile, then at the top level of projects.toml for a
+    value shared across profiles, then give up loudly.
+    """
+    value = raw.get(key, _projects_default(key, None))
+    if value is None:
+        raise ConfigError(
+            f"Project {project_id!r} sets no {key!r}. Put it in that profile, or once at "
+            f"the top level of {PROJECTS_CONFIG_PATH} to share it across every profile."
+        )
+    return value
 
 
 def _projects_default(key: str, fallback):
@@ -295,6 +265,13 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
     if not isinstance(name, str) or not name.strip():
         raise ConfigError(f"Project {project_id!r} has an invalid name")
 
+    topic_statement = str(_required_profile_value(raw, "topic_statement", project_id))
+    if not topic_statement.strip():
+        raise ConfigError(
+            f"Project {project_id!r} has an empty 'topic_statement'. It is the text every "
+            "paper is scored against, so an empty one matches nothing."
+        )
+
     try:
         related_work_facets = [
             related_work.facet_from_mapping(item)
@@ -306,9 +283,11 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
     return ProjectProfile(
         id=project_id,
         name=name,
-        topic_statement=_profile_value(raw, "topic_statement", TOPIC_STATEMENT),
-        crossref_query_hint=_profile_value(raw, "crossref_query_hint", CROSSREF_QUERY_HINT),
-        arxiv_categories=list(_profile_value(raw, "arxiv_categories", ARXIV_CATEGORIES)),
+        topic_statement=topic_statement,
+        crossref_query_hint=str(
+            _profile_value(raw, "crossref_query_hint", _projects_default("crossref_query_hint", ""))
+        ),
+        arxiv_categories=list(_required_profile_value(raw, "arxiv_categories", project_id)),
         relevance_threshold=float(_profile_value(raw, "relevance_threshold", RELEVANCE_THRESHOLD)),
         relevance_scorer=_relevance_scorer(
             _profile_value(raw, "relevance_scorer", RELEVANCE_SCORER)
@@ -344,31 +323,6 @@ def _profile_from_project(raw: dict) -> ProjectProfile:
     )
 
 
-def legacy_profile() -> ProjectProfile:
-    """Single-topic fallback profile using the root ``config.toml`` settings."""
-    return ProjectProfile(
-        id=None,
-        name="PaperTracker",
-        topic_statement=TOPIC_STATEMENT,
-        crossref_query_hint=CROSSREF_QUERY_HINT,
-        arxiv_categories=list(ARXIV_CATEGORIES),
-        relevance_threshold=RELEVANCE_THRESHOLD,
-        relevance_scorer=_relevance_scorer(RELEVANCE_SCORER),
-        hybrid_relevance_threshold=HYBRID_RELEVANCE_THRESHOLD,
-        enable_reranker=ENABLE_RERANKER,
-        reranker_model=RERANKER_MODEL,
-        reranker_top_k=RERANKER_TOP_K,
-        priority_venues=list(PRIORITY_VENUES),
-        priority_venue_only=PRIORITY_VENUE_ONLY,
-        enabled_sources_default=list(ENABLED_SOURCES_DEFAULT),
-        digest_dir=_user_path(DIGEST_DIR),
-        seen_papers_file=_user_path(SEEN_PAPERS_FILE),
-        summary_cache_file=_user_path(SUMMARY_CACHE_FILE),
-        contribution_statement=None,
-        related_work_facets=[],
-    )
-
-
 def project_profiles() -> list[ProjectProfile]:
     """Return configured project profiles, or [] when ``projects.toml`` is absent."""
     global _PROJECTS_CONFIG
@@ -378,7 +332,6 @@ def project_profiles() -> list[ProjectProfile]:
     profiles = [_profile_from_project(raw) for raw in raw_projects]
     seen: set[str] = set()
     for profile in profiles:
-        assert profile.id is not None
         if profile.id in seen:
             raise ConfigError(
                 f"Duplicate project profile id {profile.id!r} in {PROJECTS_CONFIG_PATH}"
@@ -397,21 +350,39 @@ def default_project_id() -> str | None:
     return default
 
 
-def resolve_project(project_id: str | None = None) -> ProjectProfile:
-    """Resolve a requested/default project profile, falling back to legacy config."""
-    profiles = project_profiles()
-    if not profiles:
-        if project_id:
-            raise ConfigError(
-                f"No {PROJECTS_CONFIG_PATH} exists; cannot use --project {project_id!r}"
-            )
-        return legacy_profile()
+def require_projects() -> list[ProjectProfile]:
+    """Configured profiles, or a ConfigError spelling out how to create them.
 
+    There is no fallback profile. Without one, a run scores a full window of
+    papers against the placeholder prose in config.toml, matches nothing, and
+    reports it as an empty digest rather than as the misconfiguration it is —
+    after spending the fetch. Failing here costs one API call: none.
+    """
+    profiles = project_profiles()
+    if profiles:
+        return profiles
+    if PROJECTS_CONFIG_PATH.is_file():
+        raise ConfigError(
+            f"{PROJECTS_CONFIG_PATH} defines no [[projects]]. Add one with an 'id', a 'name', "
+            "and a 'topic_statement' — projects.example.toml documents every field."
+        )
+    raise ConfigError(
+        f"No topics file at {PROJECTS_CONFIG_PATH}. Create it from the shipped example:\n"
+        f"    cp projects.example.toml {PROJECTS_CONFIG_PATH}\n"
+        "then replace 'topic_statement' with a paragraph describing your research. That text "
+        "is what every paper is scored against, and the example ships placeholder prose that "
+        "matches nothing."
+    )
+
+
+def resolve_project(project_id: str | None = None) -> ProjectProfile:
+    """Resolve the requested project profile, or the configured default."""
+    profiles = require_projects()
     requested = project_id or default_project_id() or profiles[0].id
     for profile in profiles:
         if profile.id == requested:
             return profile
-    choices = ", ".join(p.id or "" for p in profiles)
+    choices = ", ".join(p.id for p in profiles)
     raise ConfigError(f"Unknown project {requested!r}. Available projects: {choices}")
 
 

@@ -143,14 +143,14 @@ describing your research in your own words. This is what every paper's title and
 abstract gets compared against, so specific beats short. `projects.example.toml`
 documents every field inline.
 
-**Do not skip this step, and do not skip the editing.** Without the file,
-PaperTracker falls back to the placeholder `topic_statement` in `config.toml`
-(*"Describe your research topic here…"*), and the copy you just made carries
-placeholder prose of its own. Either way the run looks completely healthy —
-sources answer, hundreds of papers are fetched and deduplicated — and then
-scores every one of them near 0.55 against text about describing a topic, which
-is below the 0.7 threshold. The symptom is `0/N papers passed` and an empty
-digest, not an error. `--list-projects` tells you which of the two you are on.
+**Do not skip the editing.** Without the file at all, every command stops with
+an error and exits 2, before contacting a single source — that case is loud and
+cannot waste your time. The copy you just made is the quiet one: it carries
+placeholder prose, and PaperTracker cannot tell placeholder text from a real
+topic. A run on the unedited example looks completely healthy — sources answer,
+hundreds of papers are fetched and deduplicated — and then scores every one of
+them near 0.55 against text about *describing* a topic, which is below the 0.7
+threshold. The symptom is `0/N papers passed` and an empty digest, not an error.
 
 Setting up a second machine? `user_data/` is git-ignored, so cloning does not
 bring your topics with it. Copy `user_data/projects.toml` over from the other

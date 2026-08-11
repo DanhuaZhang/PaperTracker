@@ -10,8 +10,8 @@
 #
 # Global runtime defaults (provider, sources, thresholds, output paths, Zotero,
 # summary templates) live in `config.toml`. Any field a profile omits falls
-# back to that file. Without a user_data/projects.toml, PaperTracker runs a single
-# placeholder profile built entirely from config.toml.
+# back to that file. The copy is not optional: without user_data/projects.toml,
+# PaperTracker exits with an error instead of running an untargeted digest.
 
 # Which profile runs when you don't pass --project. Must match a profile `id`.
 default_project = "my-topic"
@@ -26,6 +26,11 @@ name = "My research topic"
 # each paper's title+abstract by the local relevance scorer. This is the single
 # most important field — longer and more specific means sharper discrimination.
 # Write a paragraph, not a keyword list.
+#
+# Required, along with `arxiv_categories`. config.toml is tracked and holds no
+# topic of its own, so there is nothing to inherit: a profile missing either one
+# is a startup error. Set them per profile, or once at the top of this file
+# (above the first [[projects]]) to share them across every profile.
 topic_statement = """
 Describe the research you want to follow: the problems, methods, and settings
 that matter to you, and the kinds of results you would want to read. Mention the
@@ -46,7 +51,7 @@ crossref_query_hint = "keywords describing your topic"
 
 # `arxiv_categories`: arXiv subject categories to query.
 # Full list: https://arxiv.org/category_taxonomy
-arxiv_categories = ["cs.AI", "cs.LG"]
+arxiv_categories = ["cs.AI", "cs.GT", "cs.HC", "cs.RO", "cs.SI"]
 
 # `relevance_threshold`: papers scoring at/above this (0..1) pass to the
 # summarizer. Higher = stricter. Omit to inherit config.toml.

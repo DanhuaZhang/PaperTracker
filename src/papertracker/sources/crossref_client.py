@@ -134,7 +134,7 @@ def _fetch_all_items(
         page = min(_PAGE_SIZE, cap - offset)
         params = {
             "filter": filter_str,
-            "query": profile.crossref_query_hint if profile else config.CROSSREF_QUERY_HINT,
+            "query": profile.crossref_query_hint if profile else "",
             "rows": str(page),
             "offset": str(offset),
             "select": "DOI,title,abstract,author,published,issued,container-title,publisher,URL",

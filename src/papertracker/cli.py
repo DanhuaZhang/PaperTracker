@@ -331,23 +331,13 @@ def _validate_args(args: argparse.Namespace) -> int:
 def _resolve_profiles(args: argparse.Namespace) -> tuple[list[config.ProjectProfile] | None, int]:
     try:
         if args.list_projects:
-            profiles = config.project_profiles()
-            if not profiles:
-                print(
-                    "(no user_data/projects.toml configured; "
-                    "using the placeholder topic from config.toml)"
-                )
-            else:
-                default = config.default_project_id()
-                for profile in profiles:
-                    marker = " *" if profile.id == default else ""
-                    print(f"{profile.id}\t{profile.name}{marker}")
+            default = config.default_project_id()
+            for profile in config.require_projects():
+                marker = " *" if profile.id == default else ""
+                print(f"{profile.id}\t{profile.name}{marker}")
             return None, 0
         if args.all_projects:
-            profiles = config.project_profiles()
-            if not profiles:
-                return [config.resolve_project(None)], 0
-            return profiles, 0
+            return config.require_projects(), 0
         return [config.resolve_project(args.project)], 0
     except config.ConfigError as e:
         log.error(str(e))
@@ -498,7 +488,7 @@ def _run_profile(
     model: str | None,
 ) -> int:
     profile = _effective_profile(profile, args)
-    label = profile.id or "legacy"
+    label = profile.id
     log.info("Project: %s (%s)", profile.name, label)
 
     source_arg = args.sources or ",".join(profile.enabled_sources_default)
@@ -681,7 +671,7 @@ def _run_profile(
 
 def _run_related_work_profile(profile: config.ProjectProfile, args: argparse.Namespace) -> int:
     profile = _effective_profile(profile, args)
-    label = profile.id or "legacy"
+    label = profile.id
     cap = (
         args.max_results if args.max_results is not None else min(config.MAX_RESULTS_PER_QUERY, 200)
     )
@@ -749,7 +739,7 @@ def _run_faceted_related_work_profile(
     profile: config.ProjectProfile, args: argparse.Namespace
 ) -> int:
     profile = _effective_profile(profile, args)
-    label = profile.id or "legacy"
+    label = profile.id
     limit = max(1, args.limit)
     threshold = _active_threshold(profile, args)
     today_str = dt.date.today().isoformat()

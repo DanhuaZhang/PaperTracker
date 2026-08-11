@@ -126,9 +126,6 @@ hybrid_relevance_threshold = 0.34
 enable_reranker = true
 reranker_model = "test/reranker"
 reranker_top_k = 7
-topic_statement = "test topic"
-crossref_query_hint = "test query"
-arxiv_categories = ["cs.AI"]
 priority_venue_only = true
 priority_venues = []
 user_email = "local@example.com"
@@ -174,9 +171,9 @@ default_fulltext_template = "Deep"
         assert loaded.ENABLE_RERANKER is True
         assert loaded.RERANKER_MODEL == "test/reranker"
         assert loaded.RERANKER_TOP_K == 7
-        assert loaded.TOPIC_STATEMENT == "test topic"
-        assert loaded.CROSSREF_QUERY_HINT == "test query"
-        assert loaded.ARXIV_CATEGORIES == ["cs.AI"]
+        # No TOPIC_STATEMENT / CROSSREF_QUERY_HINT / ARXIV_CATEGORIES here: research
+        # content is a projects.toml concern and config.toml no longer carries it.
+        assert not hasattr(loaded, "TOPIC_STATEMENT")
         assert loaded.PRIORITY_VENUE_ONLY is True
         assert loaded.PRIORITY_VENUES == []
         assert loaded.USER_EMAIL == "local@example.com"
