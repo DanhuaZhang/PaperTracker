@@ -73,6 +73,29 @@ def test_the_spawned_argv_leads_with_the_resolved_path(monkeypatch, tmp_path):
     assert _same_path(run.call_args.args[0][0], expected)
 
 
+def test_a_prompt_outside_the_ansi_code_page_survives_the_pipe():
+    """`text=True` alone encodes stdin with cp1252 on Windows, and PDFs are not cp1252.
+
+    U+02C7 came out of a real paper. Encoding it for the provider's stdin raised
+    UnicodeEncodeError partway through a chunked full-text summary, discarding
+    the extraction and every chunk already summarized.
+    """
+    prompt = "caron ˇ emdash — cjk 中文 ligature ﬁ"
+    echo = "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"
+
+    assert summarizer._run_provider_cli([sys.executable, "-c", echo], prompt) == prompt
+
+
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+def test_neither_provider_is_spawned_at_the_locale_encoding(provider):
+    """Both CLIs write UTF-8 to a pipe, so decoding their reply must match."""
+    with mock.patch("papertracker.summarizer.subprocess.run") as run:
+        run.return_value = mock.Mock(stdout="ok")
+        getattr(summarizer, f"_summarize_{provider}")("prompt", "model")
+
+    assert run.call_args.kwargs["encoding"] == "utf-8"
+
+
 def test_zotero_opens_a_database_under_a_path_containing_a_space(tmp_path):
     """Windows temp dirs sit under C:\\Users\\First Last\\ more often than not."""
     data_dir = tmp_path / "Zotero Data"

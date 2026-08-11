@@ -486,6 +486,35 @@ def _codex_effort_args() -> list[str]:
     return ["-c", f'model_reasoning_effort="{_REASONING_EFFORT}"']
 
 
+def _run_provider_cli(cmd: list[str], prompt: str) -> str:
+    """Exchange text with a provider CLI as UTF-8 rather than the ANSI code page.
+
+    ``text=True`` on its own encodes stdin with ``locale.getencoding()``, which
+    is cp1252 on a stock Windows install and cannot represent most of what a
+    real paper contains — ˇ and other combining marks, ligatures, CJK names. A
+    prompt built from extracted PDF text then dies with UnicodeEncodeError
+    *after* the extraction and any earlier chunks have been paid for. POSIX
+    never saw it because its locale is already UTF-8. Both CLIs speak UTF-8 on a
+    pipe whatever the console code page says, so this is the encoding on both
+    sides; ``bootstrap._force_utf8_output`` makes the same correction for our
+    own streams.
+
+    ``errors`` only affects decoding their reply: encoding to UTF-8 cannot fail,
+    so nothing in the prompt is silently replaced.
+    """
+    result = subprocess.run(
+        cmd,
+        input=prompt,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=config.SUMMARY_TIMEOUT_SEC,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
 def _summarize_claude(prompt: str, model: str, pdf_path=None) -> str:
     cmd = [
         resolve_binary("claude"),
@@ -498,15 +527,7 @@ def _summarize_claude(prompt: str, model: str, pdf_path=None) -> str:
         "--disallowed-tools",
         "*",
     ]
-    result = subprocess.run(
-        cmd,
-        input=prompt,
-        capture_output=True,
-        text=True,
-        timeout=config.SUMMARY_TIMEOUT_SEC,
-        check=True,
-    )
-    return result.stdout.strip()
+    return _run_provider_cli(cmd, prompt)
 
 
 def _summarize_codex(prompt: str, model: str, pdf_path=None) -> str:
@@ -521,12 +542,4 @@ def _summarize_codex(prompt: str, model: str, pdf_path=None) -> str:
         *_codex_effort_args(),
         "-",
     ]
-    result = subprocess.run(
-        cmd,
-        input=prompt,
-        capture_output=True,
-        text=True,
-        timeout=config.SUMMARY_TIMEOUT_SEC,
-        check=True,
-    )
-    return result.stdout.strip()
+    return _run_provider_cli(cmd, prompt)
